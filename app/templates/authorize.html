@@ -1,8 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2 class="text-2xl font-bold mb-4">Authorization</h2>
-<div id="authorize-form">
-    <!-- htmx will load authorization form here -->
-    <p class="text-gray-500">Authorization check UI coming soon.</p>
-</div>
+<div id="authorize-form" hx-get="/htmx/authorize/form" hx-trigger="load" hx-swap="outerHTML"></div>
+<div id="authorize-result"></div>
 {% endblock %} 

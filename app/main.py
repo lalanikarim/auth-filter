@@ -165,6 +165,20 @@ async def htmx_associations_create(
     associations = result.fetchall()
     return templates.TemplateResponse("partials/associations_list.html", {"associations": associations})
 
+@app.get("/htmx/authorize/form", response_class=HTMLResponse)
+async def htmx_authorize_form(request: Request):
+    return templates.TemplateResponse("partials/authorize_form.html", {"request": request})
+
+@app.post("/htmx/authorize/check", response_class=HTMLResponse)
+async def htmx_authorize_check(
+    email: str = Form(...),
+    url_path: str = Form(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    from app.crud import is_user_allowed
+    allowed = await is_user_allowed(session, email, url_path)
+    return templates.TemplateResponse("partials/authorize_result.html", {"allowed": allowed, "email": email, "url_path": url_path})
+
 # Routers for API endpoints will be included here (e.g., from app.api.endpoints import ...)
 # Example: app.include_router(user_group_router)
 app.include_router(auth_router)

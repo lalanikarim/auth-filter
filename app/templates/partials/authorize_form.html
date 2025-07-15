@@ -1,0 +1,11 @@
+<form hx-post="/htmx/authorize/check" hx-target="#authorize-result" hx-swap="outerHTML" class="mb-4 flex gap-2 items-end">
+  <div>
+    <label for="email" class="block text-sm font-medium text-gray-700">User Email</label>
+    <input type="email" name="email" id="email" required class="mt-1 px-2 py-1 border rounded w-64">
+  </div>
+  <div>
+    <label for="url_path" class="block text-sm font-medium text-gray-700">URL Path</label>
+    <input type="text" name="url_path" id="url_path" required class="mt-1 px-2 py-1 border rounded w-48" placeholder="/dashboard">
+  </div>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Check</button>
+</form> 
