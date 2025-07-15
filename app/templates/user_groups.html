@@ -1,8 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2 class="text-2xl font-bold mb-4">User Groups</h2>
-<div id="user-groups-list">
-    <!-- htmx will load user groups here -->
-    <p class="text-gray-500">User group management UI coming soon.</p>
+<div class="mb-4">
+  <button 
+    hx-get="/htmx/user-groups/create-form" 
+    hx-target="#user-groups-create-form" 
+    hx-swap="innerHTML"
+    class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+    + New Group
+  </button>
 </div>
+<div id="user-groups-create-form"></div>
+<div id="user-groups-list" hx-get="/htmx/user-groups/list" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endblock %} 

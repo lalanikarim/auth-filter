@@ -1,0 +1,16 @@
+<ul class="divide-y divide-gray-200">
+  {% for group in groups %}
+    <li class="py-2 flex items-center justify-between">
+      <span class="font-medium">{{ group.name }}</span>
+      <button 
+        hx-get="/htmx/user-groups/{{ group.group_id }}/add-user-form" 
+        hx-target="#user-groups-list" 
+        hx-swap="afterend"
+        class="ml-2 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm">
+        Add User
+      </button>
+    </li>
+  {% else %}
+    <li class="py-2 text-gray-500">No user groups found.</li>
+  {% endfor %}
+</ul> 
