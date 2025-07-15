@@ -227,18 +227,32 @@ async def delete_url_group(request: Request, group_id: int, session: AsyncSessio
 
 @app.get("/associations")
 async def associations(request: Request, session: AsyncSession = Depends(get_async_session)):
+    sort = request.query_params.get("sort", "user_group")
+    order = request.query_params.get("order", "asc")
     # Get all associations with group names
     result = await session.execute(text('''
         SELECT a.user_group_id, ug.name as user_group_name, a.url_group_id, ugg.name as url_group_name
         FROM user_group_url_group_associations a
         JOIN user_groups ug ON a.user_group_id = ug.group_id
         JOIN url_groups ugg ON a.url_group_id = ugg.group_id
-        ORDER BY a.user_group_id, a.url_group_id
     '''))
     associations = result.fetchall()
+    # Sort in Python for flexibility
+    reverse = (order == "desc")
+    if sort == "user_group":
+        associations = sorted(associations, key=lambda a: (a.user_group_name or ""), reverse=reverse)
+    elif sort == "url_group":
+        associations = sorted(associations, key=lambda a: (a.url_group_name or ""), reverse=reverse)
     user_groups = (await session.execute(text("SELECT group_id, name FROM user_groups ORDER BY name"))).fetchall()
     url_groups = (await session.execute(text("SELECT group_id, name FROM url_groups ORDER BY name"))).fetchall()
-    return templates.TemplateResponse("associations.html", {"request": request, "associations": associations, "user_groups": user_groups, "url_groups": url_groups})
+    return templates.TemplateResponse("associations.html", {
+        "request": request,
+        "associations": associations,
+        "user_groups": user_groups,
+        "url_groups": url_groups,
+        "sort": sort,
+        "order": order
+    })
 
 @app.post("/associations")
 async def create_association(request: Request, user_group_id: int = Form(...), url_group_id: int = Form(...), redirect: str = Form(None), session: AsyncSession = Depends(get_async_session)):

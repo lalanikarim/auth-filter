@@ -2,37 +2,71 @@
 {% block content %}
 <h4 class="center-align">Associations</h4>
 <div class="row">
-  <div class="col s12 center-align" style="margin-bottom: 2rem;">
-    <a class="btn green modal-trigger" href="#new-association-modal">
+  <div class="col s12 center-align" style="margin-bottom: 2.5rem;">
+    <a class="btn green modal-trigger" href="#new-association-modal" style="box-shadow: 0 2px 6px rgba(60,60,60,0.08);">
       <i class="material-icons left">add</i>New Association
     </a>
   </div>
 </div>
 <div class="row">
-  {% for assoc in associations %}
-    <div class="col s12 m6 l4">
-      <div class="card">
-        <div class="card-content">
-          <span class="card-title">
-            <i class="material-icons left">group</i>User Group: {{ assoc.user_group_name }}
-          </span>
-          <p>
-            <i class="material-icons left">link</i>
-            <b>URL Group:</b> {{ assoc.url_group_name }}
-          </p>
-        </div>
-        <div class="card-action right-align">
-          <form method="post" action="/associations/remove" style="display:inline;">
-            <input type="hidden" name="user_group_id" value="{{ assoc.user_group_id }}">
-            <input type="hidden" name="url_group_id" value="{{ assoc.url_group_id }}">
-            <button class="btn-flat btn-small red-text" type="submit" title="Remove Association">
-              <i class="material-icons left">delete</i>Remove
-            </button>
-          </form>
-        </div>
-      </div>
+  <div class="col s12" style="max-width: 900px; margin: 0 auto;">
+    <div style="background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(60,60,60,0.10); padding: 2rem 1.5rem 1.5rem 1.5rem;">
+      <table class="striped highlight responsive-table" style="margin-bottom: 0;">
+        <thead>
+          <tr style="font-size: 1.15rem; font-weight: 600;">
+            <th style="padding: 16px 12px;">
+              <a href="?sort=user_group&order={% if sort == 'user_group' and order == 'asc' %}desc{% else %}asc{% endif %}" style="color: #1976d2; text-decoration: none; font-weight: bold;">
+                User Group
+                {% if sort == 'user_group' %}
+                  {% if order == 'asc' %}
+                    &#9650;
+                  {% else %}
+                    &#9660;
+                  {% endif %}
+                {% endif %}
+              </a>
+            </th>
+            <th style="padding: 16px 12px;">
+              <a href="?sort=url_group&order={% if sort == 'url_group' and order == 'asc' %}desc{% else %}asc{% endif %}" style="color: #1976d2; text-decoration: none; font-weight: bold;">
+                URL Group
+                {% if sort == 'url_group' %}
+                  {% if order == 'asc' %}
+                    &#9650;
+                  {% else %}
+                    &#9660;
+                  {% endif %}
+                {% endif %}
+              </a>
+            </th>
+            <th style="padding: 16px 12px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for assoc in associations %}
+          <tr style="font-size: 1.08rem; transition: background 0.2s;">
+            <td style="padding: 14px 12px;">{{ assoc.user_group_name }}</td>
+            <td style="padding: 14px 12px;">{{ assoc.url_group_name }}</td>
+            <td class="right-align" style="padding: 10px 12px;">
+              <form method="post" action="/associations/remove" style="display:inline;">
+                <input type="hidden" name="user_group_id" value="{{ assoc.user_group_id }}">
+                <input type="hidden" name="url_group_id" value="{{ assoc.url_group_id }}">
+                <input type="hidden" name="redirect" value="/associations?sort={{ sort }}&order={{ order }}">
+                <button class="btn-flat btn-small" type="submit" title="Remove Association" style="color: #e57373; display: flex; align-items: center; gap: 4px;">
+                  <i class="material-icons" style="font-size: 1.2rem; vertical-align: middle;">delete</i>
+                  <span style="font-size: 1rem; font-weight: 500; letter-spacing: 0.5px;">Remove</span>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3" class="center-align grey-text">No associations found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-  {% endfor %}
+  </div>
 </div>
 <!-- New Association Modal -->
 <div id="new-association-modal" class="modal">
@@ -57,6 +91,7 @@
         </select>
         <label>URL Group</label>
       </div>
+      <input type="hidden" name="redirect" value="/associations?sort={{ sort }}&order={{ order }}">
       <button class="btn green" type="submit">Create</button>
     </form>
   </div>
@@ -67,6 +102,16 @@
     M.Modal.init(modals);
     var selects = document.querySelectorAll('select');
     M.FormSelect.init(selects);
+    // Row hover effect
+    var rows = document.querySelectorAll('tbody tr');
+    rows.forEach(function(row) {
+      row.addEventListener('mouseenter', function() {
+        row.style.background = '#f5f7fa';
+      });
+      row.addEventListener('mouseleave', function() {
+        row.style.background = '';
+      });
+    });
   });
 </script>
 {% endblock %} 
