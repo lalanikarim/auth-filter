@@ -62,6 +62,7 @@ async def root(request: Request):
 
 @app.get("/user-groups")
 async def user_groups(request: Request, session: AsyncSession = Depends(get_async_session)):
+    selected = request.query_params.get("selected")
     result = await session.execute(text("SELECT group_id, name FROM user_groups ORDER BY group_id"))
     groups = result.fetchall()
     # Fetch users in each group
@@ -69,14 +70,43 @@ async def user_groups(request: Request, session: AsyncSession = Depends(get_asyn
     user_rows = await session.execute(text("SELECT user_group_id, user_email FROM user_group_members ORDER BY user_group_id, user_email"))
     for row in user_rows:
         user_map[row.user_group_id].append(row.user_email)
-    # Fetch associations for delete button logic
+    # Fetch associations for delete button logic and for url group lookup
     assoc_rows = await session.execute(text('''
         SELECT a.user_group_id, a.url_group_id
         FROM user_group_url_group_associations a
     '''))
     associations = assoc_rows.fetchall()
     associated_user_group_ids = set(row.user_group_id for row in associations)
-    return templates.TemplateResponse("user_groups.html", {"request": request, "groups": groups, "users_in_group": user_map, "associations": associations, "associated_user_group_ids": associated_user_group_ids})
+    # Fetch all url groups
+    url_group_rows = await session.execute(text("SELECT group_id, name FROM url_groups ORDER BY group_id"))
+    url_groups = url_group_rows.fetchall()
+    # Prepare selected group data
+    selected_group = None
+    selected_group_users = []
+    selected_group_url_group_ids = []
+    selected_group_url_groups = []
+    if selected:
+        try:
+            selected_id = int(selected)
+            selected_group = next((g for g in groups if g.group_id == selected_id), None)
+            if selected_group:
+                selected_group_users = user_map.get(selected_id, [])
+                selected_group_url_group_ids = [a.url_group_id for a in associations if a.user_group_id == selected_id]
+                selected_group_url_groups = [g for g in url_groups if g.group_id in selected_group_url_group_ids]
+        except Exception:
+            selected_group = None
+    return templates.TemplateResponse("user_groups.html", {
+        "request": request,
+        "groups": groups,
+        "users_in_group": user_map,
+        "associations": associations,
+        "associated_user_group_ids": associated_user_group_ids,
+        "url_groups": url_groups,
+        "selected_group": selected_group,
+        "selected_group_users": selected_group_users,
+        "selected_group_url_groups": selected_group_url_groups,
+        "selected": selected
+    })
 
 @app.post("/user-groups")
 async def create_user_group(request: Request, name: str = Form(...), session: AsyncSession = Depends(get_async_session)):
@@ -95,7 +125,7 @@ async def add_user_to_group(request: Request, group_id: int, email: str = Form(.
     if not db_user:
         await crud.create_user(session, email)
     await crud.add_user_to_group(session, group_id, email)
-    return RedirectResponse(url="/user-groups", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/user-groups/{group_id}/remove-user")
 async def remove_user_from_group(request: Request, group_id: int, email: str = Form(...), session: AsyncSession = Depends(get_async_session)):
