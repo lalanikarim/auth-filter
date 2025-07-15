@@ -1,4 +1,7 @@
-<form hx-post="/htmx/user-groups/create" hx-target="#user-groups-list" hx-swap="outerHTML" class="mb-4 flex gap-2 items-end">
+{% if error %}
+  <div class="text-red-600 mb-2">{{ error }}</div>
+{% endif %}
+<form hx-post="/htmx/user-groups/create" hx-target="#user-groups-form" hx-swap="innerHTML" class="mb-4 flex gap-2 items-end">
   <div>
     <label for="name" class="block text-sm font-medium text-gray-700">Group Name</label>
     <input type="text" name="name" id="name" required class="mt-1 px-2 py-1 border rounded w-48">

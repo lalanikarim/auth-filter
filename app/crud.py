@@ -75,3 +75,14 @@ async def is_user_allowed(session: AsyncSession, email: str, url_path: str) -> b
     )
     result = await session.execute(q)
     return result.scalar_one_or_none() is not None
+
+async def get_url(session: AsyncSession, path: str) -> Optional[Url]:
+    result = await session.execute(select(Url).where(Url.path == path))
+    return result.scalar_one_or_none()
+
+async def create_url(session: AsyncSession, path: str, url_group_id: int) -> Url:
+    url = Url(path=path, url_group_id=url_group_id)
+    session.add(url)
+    await session.commit()
+    await session.refresh(url)
+    return url

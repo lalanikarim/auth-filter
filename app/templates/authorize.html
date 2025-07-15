@@ -1,6 +1,27 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2 class="text-2xl font-bold mb-4">Authorization</h2>
-<div id="authorize-form" hx-get="/htmx/authorize/form" hx-trigger="load" hx-swap="outerHTML"></div>
-<div id="authorize-result"></div>
+<h2 class="text-2xl font-bold mb-4">Authorization Check</h2>
+<div x-data="{ showForm: true }" class="mb-4">
+  <button 
+    @click="showForm = !showForm"
+    class="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+    Check Authorization
+  </button>
+  <form x-show="showForm" method="post" action="/authorize" class="mt-4 flex gap-2 items-end">
+    <div>
+      <label for="email" class="block text-sm font-medium text-gray-700">User Email</label>
+      <input type="email" name="email" id="email" required class="mt-1 px-2 py-1 border rounded w-64">
+    </div>
+    <div>
+      <label for="url_path" class="block text-sm font-medium text-gray-700">URL Path</label>
+      <input type="text" name="url_path" id="url_path" required class="mt-1 px-2 py-1 border rounded w-64">
+    </div>
+    <button type="submit" class="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">Check</button>
+  </form>
+</div>
+{% if allowed is not none %}
+  <div class="mt-6 p-4 rounded {{ 'bg-green-100 text-green-800' if allowed else 'bg-red-100 text-red-800' }}">
+    <strong>Result:</strong> {{ 'Allowed' if allowed else 'Denied' }} for {{ email }} to access {{ url_path }}
+  </div>
+{% endif %}
 {% endblock %} 
