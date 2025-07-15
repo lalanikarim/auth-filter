@@ -309,11 +309,13 @@ def auth_callback(request: Request):
         return HTMLResponse(f"Token decode error: {str(e)}", status_code=400)
     # Set cookies and redirect to next_path
     response = RedirectResponse(url=next_path)
+    APP_ENV = os.getenv("APP_ENV", "development")
+    COOKIE_SECURE = APP_ENV == "production"
     response.set_cookie(
         COOKIE_NAME,
         id_token,
         httponly=True,
-        secure=False,  # Set to True in production
+        secure=COOKIE_SECURE,
         samesite="lax",
         max_age=3600
     )
@@ -321,7 +323,7 @@ def auth_callback(request: Request):
         "x-auth-email",
         email,
         httponly=True,
-        secure=False,  # Set to True in production
+        secure=COOKIE_SECURE,
         samesite="lax",
         max_age=3600
     )
