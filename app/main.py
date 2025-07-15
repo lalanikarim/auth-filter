@@ -241,12 +241,14 @@ async def associations(request: Request, session: AsyncSession = Depends(get_asy
     return templates.TemplateResponse("associations.html", {"request": request, "associations": associations, "user_groups": user_groups, "url_groups": url_groups})
 
 @app.post("/associations")
-async def create_association(request: Request, user_group_id: int = Form(...), url_group_id: int = Form(...), session: AsyncSession = Depends(get_async_session)):
+async def create_association(request: Request, user_group_id: int = Form(...), url_group_id: int = Form(...), redirect: str = Form(None), session: AsyncSession = Depends(get_async_session)):
     await crud.link_user_group_to_url_group(session, user_group_id, url_group_id)
+    if redirect:
+        return RedirectResponse(url=redirect, status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse(url="/associations", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/associations/remove")
-async def remove_association(request: Request, user_group_id: int = Form(...), url_group_id: int = Form(...), session: AsyncSession = Depends(get_async_session)):
+async def remove_association(request: Request, user_group_id: int = Form(...), url_group_id: int = Form(...), redirect: str = Form(None), session: AsyncSession = Depends(get_async_session)):
     from app.models import user_group_url_group_associations
     await session.execute(
         delete(user_group_url_group_associations).where(
@@ -255,6 +257,8 @@ async def remove_association(request: Request, user_group_id: int = Form(...), u
         )
     )
     await session.commit()
+    if redirect:
+        return RedirectResponse(url=redirect, status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse(url="/associations", status_code=status.HTTP_303_SEE_OTHER)
 
 # Helper to fetch and cache JWKS

@@ -59,11 +59,46 @@
           <h6>Associated URL Groups</h6>
           <ul class="collection">
             {% for url_group in selected_group_url_groups %}
-              <li class="collection-item">{{ url_group.name }}</li>
+              <li class="collection-item">
+                {{ url_group.name }}
+                <form method="post" action="/associations/remove" style="display:inline; float:right; margin-left: 1rem;">
+                  <input type="hidden" name="user_group_id" value="{{ selected_group.group_id }}">
+                  <input type="hidden" name="url_group_id" value="{{ url_group.group_id }}">
+                  <input type="hidden" name="redirect" value="/user-groups?selected={{ selected_group.group_id }}">
+                  <button class="btn-flat btn-small red-text" type="submit" title="Remove Association">
+                    <i class="material-icons">remove_circle</i>
+                  </button>
+                </form>
+              </li>
             {% else %}
               <li class="collection-item grey-text">No URL groups associated.</li>
             {% endfor %}
           </ul>
+          <!-- Add Association Dropdown -->
+          {% set associated_ids = selected_group_url_groups | map(attribute='group_id') | list %}
+          {% set available_url_groups = url_groups | rejectattr('group_id', 'in', associated_ids) | list %}
+          {% if available_url_groups %}
+          <form method="post" action="/associations" style="margin-top: 1rem;">
+            <div class="input-field">
+              <select name="url_group_id" required>
+                <option value="" disabled selected>Choose URL Group</option>
+                {% for group in available_url_groups %}
+                  <option value="{{ group.group_id }}">{{ group.name }}</option>
+                {% endfor %}
+              </select>
+              <label>Link to URL Group</label>
+            </div>
+            <input type="hidden" name="user_group_id" value="{{ selected_group.group_id }}">
+            <input type="hidden" name="redirect" value="/user-groups?selected={{ selected_group.group_id }}">
+            <button class="btn green" type="submit">Link</button>
+          </form>
+          <script>
+            document.addEventListener('DOMContentLoaded', function() {
+              var selects = document.querySelectorAll('select');
+              M.FormSelect.init(selects);
+            });
+          </script>
+          {% endif %}
         </div>
       </div>
       {% if selected_group.group_id not in associated_user_group_ids %}
