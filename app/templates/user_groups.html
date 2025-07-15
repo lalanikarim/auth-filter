@@ -1,58 +1,77 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2 class="text-2xl font-bold mb-4">User Groups</h2>
-<div x-data="{ showForm: false }" class="mb-4">
-  <button 
-    @click="showForm = !showForm"
-    class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
-    + New Group
-  </button>
-  <form x-show="showForm" method="post" action="/user-groups" class="mt-4 flex gap-2 items-end" @submit="showForm = false">
-    <div>
-      <label for="name" class="block text-sm font-medium text-gray-700">Group Name</label>
-      <input type="text" name="name" id="name" required class="mt-1 px-2 py-1 border rounded w-48">
-    </div>
-    <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">Create</button>
-  </form>
+<h4 class="center-align">User Groups</h4>
+<div class="row" style="justify-content: center;">
+  <div class="col s12 center-align" style="margin-bottom: 2rem;">
+    <a class="btn green modal-trigger" href="#new-group-modal"><i class="material-icons left">group_add</i>New Group</a>
+  </div>
 </div>
-<ul class="divide-y divide-gray-200">
+<div class="row" style="justify-content: center;">
   {% for group in groups %}
-    <li class="py-2">
-      <div class="flex items-center gap-4">
-        <span>{{ group.name }}</span>
-        <div x-data="{ showAdd: false }">
-          <button @click="showAdd = !showAdd" class="text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Add User</button>
-          <form x-show="showAdd" method="post" action="/user-groups/{{ group.group_id }}/add-user" class="inline-flex gap-2 items-end ml-2">
-            <input type="email" name="email" placeholder="user@example.com" required class="px-2 py-1 border rounded w-48">
-            <button type="submit" class="px-2 py-1 bg-blue-600 text-white rounded">Add</button>
-          </form>
+    <div class="col s12 m6 l4 xl3" style="display: flex;">
+      <div class="card" style="width: 100%;">
+        <div class="card-content">
+          <span class="card-title">{{ group.name }}</span>
+          <ul class="collection">
+            {% for user in users_in_group[group.group_id] %}
+              <li class="collection-item">
+                {{ user }}
+                <form method="post" action="/user-groups/{{ group.group_id }}/remove-user" style="display:inline; float:right;">
+                  <input type="hidden" name="email" value="{{ user }}">
+                  <button class="btn-flat btn-small red-text" type="submit" title="Remove User">
+                    <i class="material-icons">remove_circle</i>
+                  </button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
         </div>
-        {% set has_assoc = false %}
-        {% for assoc in associations %}
-          {% if assoc.user_group_id == group.group_id %}
-            {% set has_assoc = true %}
+        <div class="card-action">
+          <a class="btn blue modal-trigger" href="#add-user-modal-{{ group.group_id }}">
+            <i class="material-icons left">person_add</i>Add User
+          </a>
+          {% if group.group_id not in associated_user_group_ids %}
+          <form method="post" action="/user-groups/{{ group.group_id }}/delete" style="display:inline;">
+            <button class="btn-flat btn-small red-text" type="submit" title="Delete Group">
+              <i class="material-icons left">delete</i>Delete
+            </button>
+          </form>
           {% endif %}
-        {% endfor %}
-        {% if group.group_id not in associated_user_group_ids %}
-        <form method="post" action="/user-groups/{{ group.group_id }}/delete" style="display:inline;">
-          <button type="submit" class="text-xs px-2 py-1 bg-red-600 text-white rounded">Delete</button>
-        </form>
-        {% endif %}
+        </div>
       </div>
-      {% if users_in_group[group.group_id] %}
-      <ul class="ml-8 mt-2 text-sm text-gray-700">
-        {% for user in users_in_group[group.group_id] %}
-          <li class="flex items-center gap-2">
-            <span>{{ user }}</span>
-            <form method="post" action="/user-groups/{{ group.group_id }}/remove-user" style="display:inline;">
-              <input type="hidden" name="email" value="{{ user }}">
-              <button type="submit" class="text-xs px-2 py-1 bg-red-500 text-white rounded">Remove</button>
-            </form>
-          </li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-    </li>
+    </div>
+    <!-- Add User Modal -->
+    <div id="add-user-modal-{{ group.group_id }}" class="modal">
+      <div class="modal-content">
+        <h5>Add User to {{ group.name }}</h5>
+        <form method="post" action="/user-groups/{{ group.group_id }}/add-user">
+          <div class="input-field">
+            <input type="email" name="email" id="add-user-email-{{ group.group_id }}" required>
+            <label for="add-user-email-{{ group.group_id }}">User Email</label>
+          </div>
+          <button class="btn blue" type="submit">Add</button>
+        </form>
+      </div>
+    </div>
   {% endfor %}
-</ul>
+</div>
+<!-- New Group Modal -->
+<div id="new-group-modal" class="modal">
+  <div class="modal-content">
+    <h5>Create New User Group</h5>
+    <form method="post" action="/user-groups">
+      <div class="input-field">
+        <input type="text" name="name" id="new-group-name" required>
+        <label for="new-group-name">Group Name</label>
+      </div>
+      <button class="btn green" type="submit">Create</button>
+    </form>
+  </div>
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var elems = document.querySelectorAll('.modal');
+    M.Modal.init(elems);
+  });
+</script>
 {% endblock %} 
