@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, Form, Depends, status, Body
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi import FastAPI, Request, Form, Depends, status, Body, Cookie, HTTPException
+from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from .db import engine, Base
@@ -20,6 +20,26 @@ from collections import defaultdict
 from sqlalchemy import delete
 from app.models import user_group_members, Url
 from app.models import UserGroup, UrlGroup
+import os
+from dotenv import load_dotenv
+import requests
+from urllib.parse import urlencode, quote, unquote
+from jose import jwt, JWTError
+import json
+import time
+
+load_dotenv()
+
+OAUTH2_CLIENT_ID = os.getenv("OAUTH2_CLIENT_ID", "your-client-id")
+OAUTH2_CLIENT_SECRET = os.getenv("OAUTH2_CLIENT_SECRET", "your-client-secret")
+OAUTH2_AUTH_URL = os.getenv("OAUTH2_AUTH_URL", "https://example.com/oauth2/v2/auth")
+OAUTH2_TOKEN_URL = os.getenv("OAUTH2_TOKEN_URL", "https://example.com/oauth2/token")
+OAUTH2_JWKS_URL = os.getenv("OAUTH2_JWKS_URL", "https://example.com/.well-known/jwks.json")
+OAUTH2_AUDIENCE = os.getenv("OAUTH2_AUDIENCE", OAUTH2_CLIENT_ID)
+OAUTH2_ISSUER = os.getenv("OAUTH2_ISSUER", "https://example.com")
+COOKIE_NAME = os.getenv("OAUTH2_COOKIE_NAME", "auth_token")
+REDIRECT_URI = os.getenv("OAUTH2_REDIRECT_URI", "http://localhost:8000/auth/callback")
+OAUTH2_SCOPE = os.getenv("OAUTH2_SCOPE", "openid email profile")
 
 app = FastAPI()
 
@@ -177,33 +197,141 @@ async def remove_association(request: Request, user_group_id: int = Form(...), u
     await session.commit()
     return RedirectResponse(url="/associations", status_code=status.HTTP_303_SEE_OTHER)
 
+# Helper to fetch and cache JWKS
+_jwks_cache = None
+_jwks_cache_time = 0
+_JWKS_CACHE_TTL = 3600
+
+def get_jwks():
+    global _jwks_cache, _jwks_cache_time
+    now = time.time()
+    if _jwks_cache and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
+        return _jwks_cache
+    resp = requests.get(OAUTH2_JWKS_URL)
+    resp.raise_for_status()
+    _jwks_cache = resp.json()
+    _jwks_cache_time = now
+    return _jwks_cache
+
+async def get_current_user_from_cookie(auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    jwks = get_jwks()
+    try:
+        payload = jwt.decode(
+            auth_token,
+            jwks,
+            algorithms=["RS256"],
+            audience=OAUTH2_AUDIENCE,
+            issuer=OAUTH2_ISSUER,
+            options={"verify_at_hash": False}
+        )
+        return payload
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# Protect /authorize UI
 @app.get("/authorize", response_class=HTMLResponse)
-async def authorize_page(request: Request):
-    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": None})
+async def authorize_page(request: Request, user=Depends(get_current_user_from_cookie)):
+    next_path = request.query_params.get("next", None)
+    url_path = request.query_params.get("url_path", "")
+    email = request.query_params.get("email", "")
+    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": None, "user": user, "next": next_path, "url_path": url_path, "email": email})
 
 @app.post("/authorize", response_class=HTMLResponse)
-async def authorize_check(request: Request, email: str = Form(...), url_path: str = Form(...), session: AsyncSession = Depends(get_async_session)):
+async def authorize_check(request: Request, email: str = Form(None), url_path: str = Form(None), session: AsyncSession = Depends(get_async_session), user=Depends(get_current_user_from_cookie)):
+    # Fallback to query string if not present in form
+    if not url_path:
+        url_path = request.query_params.get("url_path", "")
+    if not email:
+        email = request.query_params.get("email", "")
     from app.crud import is_user_allowed
     allowed = await is_user_allowed(session, email, url_path)
-    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": allowed, "email": email, "url_path": url_path})
+    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": allowed, "email": email, "url_path": url_path, "user": user})
 
-@app.post("/api/authorize")
-async def api_authorize(
-    email: str = Form(None),
-    url_path: str = Form(None),
-    session: AsyncSession = Depends(get_async_session),
-    body: dict = Body(None)
-):
-    # Support both form and JSON
-    if body:
-        email = body.get("email", email)
-        url_path = body.get("url_path", url_path)
-    from app.crud import is_user_allowed
-    allowed = await is_user_allowed(session, email, url_path)
-    if allowed:
-        return HTMLResponse(status_code=200)
-    else:
-        return HTMLResponse(status_code=403)
+@app.get("/auth/login")
+def auth_login(request: Request):
+    next_path = request.query_params.get("next", "/")
+    # Only allow relative paths for security
+    if not next_path.startswith("/"):
+        next_path = "/"
+    params = {
+        "client_id": OAUTH2_CLIENT_ID,
+        "response_type": "code",
+        "scope": OAUTH2_SCOPE,
+        "redirect_uri": REDIRECT_URI,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": quote(next_path),
+    }
+    url = f"{OAUTH2_AUTH_URL}?{urlencode(params)}"
+    return RedirectResponse(url)
+
+@app.get("/auth/callback")
+def auth_callback(request: Request):
+    code = request.query_params.get("code")
+    state = request.query_params.get("state", "%2F")
+    next_path = unquote(unquote(state))
+    if not next_path.startswith("/"):
+        next_path = "/"
+    if not code:
+        return HTMLResponse("Missing code", status_code=400)
+    data = {
+        "code": code,
+        "client_id": OAUTH2_CLIENT_ID,
+        "client_secret": OAUTH2_CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+    token_resp = requests.post(OAUTH2_TOKEN_URL, data=data)
+    if not token_resp.ok:
+        print("OAuth2 token exchange error:", token_resp.text)
+        return HTMLResponse(f"Token exchange failed: {token_resp.text}", status_code=400)
+    token_data = token_resp.json()
+    id_token = token_data.get("id_token")
+    if not id_token:
+        return HTMLResponse("No id_token", status_code=400)
+    # Extract email from id_token
+    try:
+        jwks = get_jwks()
+        payload = jwt.decode(
+            id_token,
+            jwks,
+            algorithms=["RS256"],
+            audience=OAUTH2_AUDIENCE,
+            issuer=OAUTH2_ISSUER,
+            options={"verify_at_hash": False}
+        )
+        email = payload.get("email")
+        if not email:
+            return HTMLResponse("No email in token", status_code=400)
+    except Exception as e:
+        return HTMLResponse(f"Token decode error: {str(e)}", status_code=400)
+    # Set cookies and redirect to next_path
+    response = RedirectResponse(url=next_path)
+    response.set_cookie(
+        COOKIE_NAME,
+        id_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=3600
+    )
+    response.set_cookie(
+        "x-auth-email",
+        email,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=3600
+    )
+    return response
+
+@app.get("/logout")
+def logout():
+    response = RedirectResponse(url="/")
+    response.delete_cookie(COOKIE_NAME)
+    return response
 
 # Routers for API endpoints will be included here (e.g., from app.api.endpoints import ...)
 # Example: app.include_router(user_group_router)

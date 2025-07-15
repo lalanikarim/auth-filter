@@ -10,11 +10,11 @@
   <form x-show="showForm" method="post" action="/authorize" class="mt-4 flex gap-2 items-end">
     <div>
       <label for="email" class="block text-sm font-medium text-gray-700">User Email</label>
-      <input type="email" name="email" id="email" required class="mt-1 px-2 py-1 border rounded w-64">
+      <input type="email" name="email" id="email" required class="mt-1 px-2 py-1 border rounded w-64" value="{{ email|default('') }}">
     </div>
     <div>
       <label for="url_path" class="block text-sm font-medium text-gray-700">URL Path</label>
-      <input type="text" name="url_path" id="url_path" required class="mt-1 px-2 py-1 border rounded w-64">
+      <input type="text" name="url_path" id="url_path" required class="mt-1 px-2 py-1 border rounded w-64" value="{{ url_path|default('') }}">
     </div>
     <button type="submit" class="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">Check</button>
   </form>
