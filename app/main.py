@@ -92,6 +92,41 @@ async def htmx_user_groups_add_user(
     groups = result.fetchall()
     return templates.TemplateResponse("partials/user_groups_list.html", {"groups": groups})
 
+@app.get("/htmx/url-groups/list", response_class=HTMLResponse)
+async def htmx_url_groups_list(session: AsyncSession = Depends(get_async_session)):
+    result = await session.execute("SELECT group_id, name FROM url_groups ORDER BY group_id")
+    groups = result.fetchall()
+    return templates.TemplateResponse("partials/url_groups_list.html", {"groups": groups})
+
+@app.get("/htmx/url-groups/create-form", response_class=HTMLResponse)
+async def htmx_url_groups_create_form(request: Request):
+    return templates.TemplateResponse("partials/url_groups_create_form.html", {"request": request})
+
+@app.post("/htmx/url-groups/create", response_class=HTMLResponse)
+async def htmx_url_groups_create(
+    name: str = Form(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    await crud.create_url_group(session, name)
+    result = await session.execute("SELECT group_id, name FROM url_groups ORDER BY group_id")
+    groups = result.fetchall()
+    return templates.TemplateResponse("partials/url_groups_list.html", {"groups": groups})
+
+@app.get("/htmx/url-groups/{group_id}/add-url-form", response_class=HTMLResponse)
+async def htmx_url_groups_add_url_form(request: Request, group_id: int):
+    return templates.TemplateResponse("partials/url_groups_add_url_form.html", {"request": request, "group_id": group_id})
+
+@app.post("/htmx/url-groups/{group_id}/add-url", response_class=HTMLResponse)
+async def htmx_url_groups_add_url(
+    group_id: int,
+    path: str = Form(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    await crud.add_url_to_group(session, group_id, path)
+    result = await session.execute("SELECT group_id, name FROM url_groups ORDER BY group_id")
+    groups = result.fetchall()
+    return templates.TemplateResponse("partials/url_groups_list.html", {"groups": groups})
+
 # Routers for API endpoints will be included here (e.g., from app.api.endpoints import ...)
 # Example: app.include_router(user_group_router)
 app.include_router(auth_router)

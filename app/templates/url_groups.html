@@ -1,8 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2 class="text-2xl font-bold mb-4">URL Groups</h2>
-<div id="url-groups-list">
-    <!-- htmx will load url groups here -->
-    <p class="text-gray-500">URL group management UI coming soon.</p>
+<div class="mb-4">
+  <button 
+    hx-get="/htmx/url-groups/create-form" 
+    hx-target="#url-groups-create-form" 
+    hx-swap="innerHTML"
+    class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+    + New Group
+  </button>
 </div>
+<div id="url-groups-create-form"></div>
+<div id="url-groups-list" hx-get="/htmx/url-groups/list" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endblock %} 

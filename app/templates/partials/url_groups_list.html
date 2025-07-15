@@ -1,0 +1,16 @@
+<ul class="divide-y divide-gray-200">
+  {% for group in groups %}
+    <li class="py-2 flex items-center justify-between">
+      <span class="font-medium">{{ group.name }}</span>
+      <button 
+        hx-get="/htmx/url-groups/{{ group.group_id }}/add-url-form" 
+        hx-target="#url-groups-list" 
+        hx-swap="afterend"
+        class="ml-2 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm">
+        Add URL
+      </button>
+    </li>
+  {% else %}
+    <li class="py-2 text-gray-500">No URL groups found.</li>
+  {% endfor %}
+</ul> 
