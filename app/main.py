@@ -131,7 +131,7 @@ async def add_user_to_group(request: Request, group_id: int, email: str = Form(.
 async def remove_user_from_group(request: Request, group_id: int, email: str = Form(...), session: AsyncSession = Depends(get_async_session)):
     await session.execute(delete(user_group_members).where(user_group_members.c.user_group_id == group_id, user_group_members.c.user_email == email))
     await session.commit()
-    return RedirectResponse(url="/user-groups", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/user-groups/{group_id}/delete")
 async def delete_user_group(request: Request, group_id: int, session: AsyncSession = Depends(get_async_session)):
@@ -144,6 +144,7 @@ async def delete_user_group(request: Request, group_id: int, session: AsyncSessi
 
 @app.get("/url-groups")
 async def url_groups(request: Request, session: AsyncSession = Depends(get_async_session)):
+    selected = request.query_params.get("selected")
     result = await session.execute(text("SELECT group_id, name FROM url_groups ORDER BY group_id"))
     groups = result.fetchall()
     # Fetch urls in each group
@@ -151,14 +152,43 @@ async def url_groups(request: Request, session: AsyncSession = Depends(get_async
     url_rows = await session.execute(text("SELECT url_group_id, path FROM urls ORDER BY url_group_id, path"))
     for row in url_rows:
         url_map[row.url_group_id].append(row.path)
-    # Fetch associations for delete button logic
+    # Fetch associations for delete button logic and for user group lookup
     assoc_rows = await session.execute(text('''
         SELECT a.user_group_id, a.url_group_id
         FROM user_group_url_group_associations a
     '''))
     associations = assoc_rows.fetchall()
     associated_url_group_ids = set(row.url_group_id for row in associations)
-    return templates.TemplateResponse("url_groups.html", {"request": request, "groups": groups, "urls_in_group": url_map, "associations": associations, "associated_url_group_ids": associated_url_group_ids})
+    # Fetch all user groups
+    user_group_rows = await session.execute(text("SELECT group_id, name FROM user_groups ORDER BY group_id"))
+    user_groups = user_group_rows.fetchall()
+    # Prepare selected group data
+    selected_group = None
+    selected_group_urls = []
+    selected_group_user_group_ids = []
+    selected_group_user_groups = []
+    if selected:
+        try:
+            selected_id = int(selected)
+            selected_group = next((g for g in groups if g.group_id == selected_id), None)
+            if selected_group:
+                selected_group_urls = url_map.get(selected_id, [])
+                selected_group_user_group_ids = [a.user_group_id for a in associations if a.url_group_id == selected_id]
+                selected_group_user_groups = [g for g in user_groups if g.group_id in selected_group_user_group_ids]
+        except Exception:
+            selected_group = None
+    return templates.TemplateResponse("url_groups.html", {
+        "request": request,
+        "groups": groups,
+        "urls_in_group": url_map,
+        "associations": associations,
+        "associated_url_group_ids": associated_url_group_ids,
+        "user_groups": user_groups,
+        "selected_group": selected_group,
+        "selected_group_urls": selected_group_urls,
+        "selected_group_user_groups": selected_group_user_groups,
+        "selected": selected
+    })
 
 @app.post("/url-groups")
 async def create_url_group(request: Request, name: str = Form(...), session: AsyncSession = Depends(get_async_session)):
@@ -178,13 +208,13 @@ async def add_url_to_group(request: Request, group_id: int, path: str = Form(...
         await crud.create_url(session, path, group_id)
     else:
         await crud.add_url_to_group(session, group_id, path)
-    return RedirectResponse(url="/url-groups", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/url-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/url-groups/{group_id}/remove-url")
 async def remove_url_from_group(request: Request, group_id: int, path: str = Form(...), session: AsyncSession = Depends(get_async_session)):
     await session.execute(delete(Url).where(Url.url_group_id == group_id, Url.path == path))
     await session.commit()
-    return RedirectResponse(url="/url-groups", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/url-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/url-groups/{group_id}/delete")
 async def delete_url_group(request: Request, group_id: int, session: AsyncSession = Depends(get_async_session)):
