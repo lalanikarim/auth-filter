@@ -1,15 +1,58 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2 class="text-2xl font-bold mb-4">User Groups</h2>
-<div class="mb-4">
+<div x-data="{ showForm: false }" class="mb-4">
   <button 
-    hx-get="/htmx/user-groups/create-form" 
-    hx-target="#user-groups-create-form" 
-    hx-swap="innerHTML"
+    @click="showForm = !showForm"
     class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
     + New Group
   </button>
+  <form x-show="showForm" method="post" action="/user-groups" class="mt-4 flex gap-2 items-end" @submit="showForm = false">
+    <div>
+      <label for="name" class="block text-sm font-medium text-gray-700">Group Name</label>
+      <input type="text" name="name" id="name" required class="mt-1 px-2 py-1 border rounded w-48">
+    </div>
+    <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">Create</button>
+  </form>
 </div>
-<div id="user-groups-create-form"></div>
-<div id="user-groups-list" hx-get="/htmx/user-groups/list" hx-trigger="load" hx-swap="outerHTML"></div>
+<ul class="divide-y divide-gray-200">
+  {% for group in groups %}
+    <li class="py-2">
+      <div class="flex items-center gap-4">
+        <span>{{ group.name }}</span>
+        <div x-data="{ showAdd: false }">
+          <button @click="showAdd = !showAdd" class="text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Add User</button>
+          <form x-show="showAdd" method="post" action="/user-groups/{{ group.group_id }}/add-user" class="inline-flex gap-2 items-end ml-2">
+            <input type="email" name="email" placeholder="user@example.com" required class="px-2 py-1 border rounded w-48">
+            <button type="submit" class="px-2 py-1 bg-blue-600 text-white rounded">Add</button>
+          </form>
+        </div>
+        {% set has_assoc = false %}
+        {% for assoc in associations %}
+          {% if assoc.user_group_id == group.group_id %}
+            {% set has_assoc = true %}
+          {% endif %}
+        {% endfor %}
+        {% if group.group_id not in associated_user_group_ids %}
+        <form method="post" action="/user-groups/{{ group.group_id }}/delete" style="display:inline;">
+          <button type="submit" class="text-xs px-2 py-1 bg-red-600 text-white rounded">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if users_in_group[group.group_id] %}
+      <ul class="ml-8 mt-2 text-sm text-gray-700">
+        {% for user in users_in_group[group.group_id] %}
+          <li class="flex items-center gap-2">
+            <span>{{ user }}</span>
+            <form method="post" action="/user-groups/{{ group.group_id }}/remove-user" style="display:inline;">
+              <input type="hidden" name="email" value="{{ user }}">
+              <button type="submit" class="text-xs px-2 py-1 bg-red-500 text-white rounded">Remove</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
 {% endblock %} 
