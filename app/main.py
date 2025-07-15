@@ -127,6 +127,44 @@ async def htmx_url_groups_add_url(
     groups = result.fetchall()
     return templates.TemplateResponse("partials/url_groups_list.html", {"groups": groups})
 
+@app.get("/htmx/associations/list", response_class=HTMLResponse)
+async def htmx_associations_list(session: AsyncSession = Depends(get_async_session)):
+    # List all associations with group names
+    result = await session.execute('''
+        SELECT a.user_group_id, ug.name as user_group_name, a.url_group_id, ugg.name as url_group_name
+        FROM user_group_url_group_associations a
+        JOIN user_groups ug ON a.user_group_id = ug.group_id
+        JOIN url_groups ugg ON a.url_group_id = ugg.group_id
+        ORDER BY a.user_group_id, a.url_group_id
+    ''')
+    associations = result.fetchall()
+    return templates.TemplateResponse("partials/associations_list.html", {"associations": associations})
+
+@app.get("/htmx/associations/create-form", response_class=HTMLResponse)
+async def htmx_associations_create_form(session: AsyncSession = Depends(get_async_session)):
+    # Get all user groups and url groups for select options
+    user_groups = (await session.execute("SELECT group_id, name FROM user_groups ORDER BY name")).fetchall()
+    url_groups = (await session.execute("SELECT group_id, name FROM url_groups ORDER BY name")).fetchall()
+    return templates.TemplateResponse("partials/associations_create_form.html", {"user_groups": user_groups, "url_groups": url_groups})
+
+@app.post("/htmx/associations/create", response_class=HTMLResponse)
+async def htmx_associations_create(
+    user_group_id: int = Form(...),
+    url_group_id: int = Form(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    await crud.link_user_group_to_url_group(session, user_group_id, url_group_id)
+    # Return updated list
+    result = await session.execute('''
+        SELECT a.user_group_id, ug.name as user_group_name, a.url_group_id, ugg.name as url_group_name
+        FROM user_group_url_group_associations a
+        JOIN user_groups ug ON a.user_group_id = ug.group_id
+        JOIN url_groups ugg ON a.url_group_id = ugg.group_id
+        ORDER BY a.user_group_id, a.url_group_id
+    ''')
+    associations = result.fetchall()
+    return templates.TemplateResponse("partials/associations_list.html", {"associations": associations})
+
 # Routers for API endpoints will be included here (e.g., from app.api.endpoints import ...)
 # Example: app.include_router(user_group_router)
 app.include_router(auth_router)

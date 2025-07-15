@@ -1,0 +1,9 @@
+<ul class="divide-y divide-gray-200">
+  {% for assoc in associations %}
+    <li class="py-2 flex items-center justify-between">
+      <span>{{ assoc.user_group_name }} <span class="text-gray-400">→</span> {{ assoc.url_group_name }}</span>
+    </li>
+  {% else %}
+    <li class="py-2 text-gray-500">No associations found.</li>
+  {% endfor %}
+</ul> 
