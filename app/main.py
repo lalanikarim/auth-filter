@@ -29,6 +29,22 @@ async def on_startup():
 async def root(request: Request):
     return templates.TemplateResponse("base.html", {"request": request})
 
+@app.get("/user-groups", response_class=HTMLResponse)
+async def user_groups_page(request: Request):
+    return templates.TemplateResponse("user_groups.html", {"request": request})
+
+@app.get("/url-groups", response_class=HTMLResponse)
+async def url_groups_page(request: Request):
+    return templates.TemplateResponse("url_groups.html", {"request": request})
+
+@app.get("/associations", response_class=HTMLResponse)
+async def associations_page(request: Request):
+    return templates.TemplateResponse("associations.html", {"request": request})
+
+@app.get("/authorize", response_class=HTMLResponse)
+async def authorize_page(request: Request):
+    return templates.TemplateResponse("authorize.html", {"request": request})
+
 # Routers for API endpoints will be included here (e.g., from app.api.endpoints import ...)
 # Example: app.include_router(user_group_router)
 app.include_router(auth_router)

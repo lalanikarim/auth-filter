@@ -6,15 +6,25 @@
     <title>AuthFilter</title>
     <!-- htmx CDN -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <!-- shadcn UI (using Tailwind CSS as shadcn is a component library for Tailwind) -->
+    <!-- shadcn UI (Tailwind CSS) -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet">
     <!-- Custom styles -->
     <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
 </head>
-<body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center">
-    <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-bold mb-4">AuthFilter FastAPI Starter</h1>
-        <p class="text-lg">HTMX and shadcn UI (Tailwind) are loaded. If you see this, your stack is working!</p>
-    </div>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+    <nav class="bg-white shadow mb-6">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <span class="font-bold text-xl">AuthFilter</span>
+            <div class="space-x-4">
+                <a href="/user-groups" class="text-gray-700 hover:text-blue-600">User Groups</a>
+                <a href="/url-groups" class="text-gray-700 hover:text-blue-600">URL Groups</a>
+                <a href="/associations" class="text-gray-700 hover:text-blue-600">Associations</a>
+                <a href="/authorize" class="text-gray-700 hover:text-blue-600">Authorization</a>
+            </div>
+        </div>
+    </nav>
+    <main class="flex-1 container mx-auto px-4">
+        {% block content %}{% endblock %}
+    </main>
 </body>
 </html>
