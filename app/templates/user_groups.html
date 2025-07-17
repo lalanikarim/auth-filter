@@ -7,6 +7,13 @@
     <ul class="collection">
       {% for group in groups %}
         <a href="/user-groups?selected={{ group.group_id }}" class="collection-item{% if selected_group and group.group_id == selected_group.group_id %} active blue lighten-4{% endif %}">
+          {% if group.name == 'Internal User Group' and group.protected %}
+            <i class="material-icons left" title="Internal User Group">security</i>
+          {% elif group.name == 'Everyone' and group.protected %}
+            <i class="material-icons left" title="Everyone">public</i>
+          {% elif group.name == 'Authenticated' and group.protected %}
+            <i class="material-icons left" title="Authenticated">verified_user</i>
+          {% endif %}
           <span>{{ group.name }}</span>
         </a>
       {% endfor %}
@@ -21,7 +28,15 @@
       <div class="row">
         <!-- Left: Emails in group -->
         <div class="col s12 m6">
-          <h6>Users in {{ selected_group.name }}</h6>
+          <h6>Users in {{ selected_group.name }}
+            {% if selected_group.name == 'Internal User Group' and selected_group.protected %}
+              <i class="material-icons left" title="Internal User Group">security</i>
+            {% elif selected_group.name == 'Everyone' and selected_group.protected %}
+              <i class="material-icons left" title="Everyone">public</i>
+            {% elif selected_group.name == 'Authenticated' and selected_group.protected %}
+              <i class="material-icons left" title="Authenticated">verified_user</i>
+            {% endif %}
+          </h6>
           <ul class="collection">
             {% for user in selected_group_users %}
               <li class="collection-item">
@@ -101,7 +116,7 @@
           {% endif %}
         </div>
       </div>
-      {% if selected_group.group_id not in associated_user_group_ids %}
+      {% if selected_group and not selected_group.protected and selected_group.group_id not in associated_user_group_ids and selected_group.name != 'Internal User Group' %}
       <form method="post" action="/user-groups/{{ selected_group.group_id }}/delete" style="margin-top: 2rem;">
         <button class="btn-flat btn-small red-text" type="submit" title="Delete Group">
           <i class="material-icons left">delete</i>Delete Group

@@ -63,7 +63,38 @@ async def link_user_group_to_url_group(session: AsyncSession, user_group_id: int
 
 # Authorization check
 async def is_user_allowed(session: AsyncSession, email: str, url_path: str) -> bool:
-    # Equivalent to the SQL in the design spec
+    # Check if URL is in 'Everyone' group (public)
+    q = (
+        select(UrlGroup)
+        .join(Url, UrlGroup.group_id == Url.url_group_id)
+        .where(UrlGroup.name == "Everyone", UrlGroup.protected == 1, Url.path == url_path)
+    )
+    result = await session.execute(q)
+    if result.scalar_one_or_none():
+        return True
+
+    # Check if URL is in 'Authenticated' group (any logged-in user)
+    q = (
+        select(UrlGroup)
+        .join(Url, UrlGroup.group_id == Url.url_group_id)
+        .where(UrlGroup.name == "Authenticated", UrlGroup.protected == 1, Url.path == url_path)
+    )
+    result = await session.execute(q)
+    if result.scalar_one_or_none() and email:
+        return True
+
+    # Check if user is in Internal User Group (superuser)
+    q = (
+        select(User)
+        .join(user_group_members, User.email == user_group_members.c.user_email)
+        .join(UserGroup, user_group_members.c.user_group_id == UserGroup.group_id)
+        .where(User.email == email, UserGroup.name == "Internal User Group", UserGroup.protected == 1)
+    )
+    result = await session.execute(q)
+    if result.scalar_one_or_none():
+        return True
+
+    # Default: normal group-based check
     q = (
         select(User)
         .join(user_group_members, User.email == user_group_members.c.user_email)

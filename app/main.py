@@ -23,10 +23,11 @@ from app.models import UserGroup, UrlGroup
 import os
 from dotenv import load_dotenv
 import requests
-from urllib.parse import urlencode, quote, unquote
+from urllib.parse import urlencode, quote, unquote, urlparse
 from jose import jwt, JWTError
 import json
 import time
+import logging
 
 load_dotenv()
 
@@ -49,12 +50,50 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Set up Jinja2 templates
 templates = Jinja2Templates(directory="app/templates")
 
+logger = logging.getLogger("authfilter")
+logging.basicConfig(level=logging.DEBUG)
+
 @app.on_event("startup")
 async def on_startup():
     # Auto-create tables in dev (SQLite). In prod, use Alembic for migrations.
-    if engine.url.drivername.startswith("sqlite"):
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # if engine.url.drivername.startswith("sqlite"):
+    #     async with engine.begin() as conn:
+    #         await conn.run_sync(Base.metadata.create_all)
+
+    # Ensure internal groups exist
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.future import select
+    from app.models import UserGroup, UrlGroup
+    from sqlalchemy.orm import sessionmaker
+
+    # Use a synchronous session for startup
+    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    async with async_session() as session:
+        # Internal User Group
+        internal_user_group_name = "Internal User Group"
+        q = await session.execute(select(UserGroup).where(UserGroup.name == internal_user_group_name))
+        group = q.scalar_one_or_none()
+        if not group:
+            session.add(UserGroup(name=internal_user_group_name, protected=1))
+        elif not group.protected:
+            group.protected = 1
+        # Everyone Url Group
+        everyone_url_group_name = "Everyone"
+        q = await session.execute(select(UrlGroup).where(UrlGroup.name == everyone_url_group_name))
+        group = q.scalar_one_or_none()
+        if not group:
+            session.add(UrlGroup(name=everyone_url_group_name, protected=1))
+        elif not group.protected:
+            group.protected = 1
+        # Authenticated Url Group
+        authenticated_url_group_name = "Authenticated"
+        q = await session.execute(select(UrlGroup).where(UrlGroup.name == authenticated_url_group_name))
+        group = q.scalar_one_or_none()
+        if not group:
+            session.add(UrlGroup(name=authenticated_url_group_name, protected=1))
+        elif not group.protected:
+            group.protected = 1
+        await session.commit()
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
@@ -112,10 +151,14 @@ async def user_groups(request: Request, session: AsyncSession = Depends(get_asyn
 async def create_user_group(request: Request, name: str = Form(...), session: AsyncSession = Depends(get_async_session)):
     from sqlalchemy.exc import IntegrityError
     try:
-        await crud.create_user_group(session, name)
+        group = await crud.create_user_group(session, name)
+        group_id = group.group_id
     except IntegrityError:
         await session.rollback()
+        group_id = None
         # Optionally, add flash message logic here
+    if group_id:
+        return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse(url="/user-groups", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/user-groups/{group_id}/add-user")
@@ -135,6 +178,10 @@ async def remove_user_from_group(request: Request, group_id: int, email: str = F
 
 @app.post("/user-groups/{group_id}/delete")
 async def delete_user_group(request: Request, group_id: int, session: AsyncSession = Depends(get_async_session)):
+    # Prevent deletion if protected
+    group = await session.get(UserGroup, group_id)
+    if group and getattr(group, 'protected', False):
+        return RedirectResponse(url="/user-groups", status_code=status.HTTP_303_SEE_OTHER)
     # Only allow deletion if there are no associations
     assoc_count = (await session.execute(text("SELECT COUNT(*) FROM user_group_url_group_associations WHERE user_group_id = :gid"), {"gid": group_id})).scalar()
     if assoc_count == 0:
@@ -194,10 +241,14 @@ async def url_groups(request: Request, session: AsyncSession = Depends(get_async
 async def create_url_group(request: Request, name: str = Form(...), session: AsyncSession = Depends(get_async_session)):
     from sqlalchemy.exc import IntegrityError
     try:
-        await crud.create_url_group(session, name)
+        group = await crud.create_url_group(session, name)
+        group_id = group.group_id
     except IntegrityError:
         await session.rollback()
+        group_id = None
         # Optionally, add flash message logic here
+    if group_id:
+        return RedirectResponse(url=f"/url-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse(url="/url-groups", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/url-groups/{group_id}/add-url")
@@ -218,6 +269,10 @@ async def remove_url_from_group(request: Request, group_id: int, path: str = For
 
 @app.post("/url-groups/{group_id}/delete")
 async def delete_url_group(request: Request, group_id: int, session: AsyncSession = Depends(get_async_session)):
+    # Prevent deletion if protected
+    group = await session.get(UrlGroup, group_id)
+    if group and getattr(group, 'protected', False):
+        return RedirectResponse(url="/url-groups", status_code=status.HTTP_303_SEE_OTHER)
     # Only allow deletion if there are no associations
     assoc_count = (await session.execute(text("SELECT COUNT(*) FROM user_group_url_group_associations WHERE url_group_id = :gid"), {"gid": group_id})).scalar()
     if assoc_count == 0:
@@ -333,8 +388,12 @@ def is_safe_next_path(url: str) -> bool:
 @app.get("/auth/login")
 def auth_login(request: Request):
     next_path = request.query_params.get("next", "/")
+    logger.debug(f"/auth/login: received next param: {next_path}")
     if not is_safe_next_path(next_path):
+        logger.debug(f"/auth/login: next_path '{next_path}' is not safe, defaulting to '/'")
         next_path = "/"
+    else:
+        logger.debug(f"/auth/login: using next_path: {next_path}")
     params = {
         "client_id": OAUTH2_CLIENT_ID,
         "response_type": "code",
@@ -345,6 +404,7 @@ def auth_login(request: Request):
         "state": quote(next_path),
     }
     url = f"{OAUTH2_AUTH_URL}?{urlencode(params)}"
+    logger.debug(f"/auth/login: redirecting to OAuth2 URL: {url}")
     return RedirectResponse(url)
 
 @app.get("/auth/callback")
@@ -352,9 +412,14 @@ def auth_callback(request: Request):
     code = request.query_params.get("code")
     state = request.query_params.get("state", "%2F")
     next_path = unquote(unquote(state))
+    logger.debug(f"/auth/callback: received state param: {state}, decoded next_path: {next_path}")
     if not is_safe_next_path(next_path):
+        logger.debug(f"/auth/callback: next_path '{next_path}' is not safe, defaulting to '/'")
         next_path = "/"
+    else:
+        logger.debug(f"/auth/callback: using next_path: {next_path}")
     if not code:
+        logger.error("/auth/callback: Missing code parameter")
         return HTMLResponse("Missing code", status_code=400)
     data = {
         "code": code,
@@ -363,13 +428,15 @@ def auth_callback(request: Request):
         "redirect_uri": REDIRECT_URI,
         "grant_type": "authorization_code",
     }
+    logger.debug(f"/auth/callback: exchanging code for token at {OAUTH2_TOKEN_URL}")
     token_resp = requests.post(OAUTH2_TOKEN_URL, data=data)
     if not token_resp.ok:
-        print("OAuth2 token exchange error:", token_resp.text)
+        logger.error(f"/auth/callback: OAuth2 token exchange error: {token_resp.text}")
         return HTMLResponse(f"Token exchange failed: {token_resp.text}", status_code=400)
     token_data = token_resp.json()
     id_token = token_data.get("id_token")
     if not id_token:
+        logger.error("/auth/callback: No id_token in token response")
         return HTMLResponse("No id_token", status_code=400)
     # Extract email from id_token
     try:
@@ -384,9 +451,18 @@ def auth_callback(request: Request):
         )
         email = payload.get("email")
         if not email:
+            logger.error("/auth/callback: No email in token payload")
             return HTMLResponse("No email in token", status_code=400)
+        logger.debug(f"/auth/callback: extracted email: {email}")
     except Exception as e:
+        logger.error(f"/auth/callback: Token decode error: {str(e)}")
         return HTMLResponse(f"Token decode error: {str(e)}", status_code=400)
+    # Determine cookie domain
+    cookie_domain = None
+    if next_path.startswith("http://") or next_path.startswith("https://"):
+        parsed = urlparse(next_path)
+        cookie_domain = parsed.hostname
+        logger.debug(f"/auth/callback: setting cookie domain to {cookie_domain}")
     # Set cookies and redirect to next_path
     response = RedirectResponse(url=next_path)
     APP_ENV = os.getenv("APP_ENV", "development")
@@ -397,7 +473,8 @@ def auth_callback(request: Request):
         httponly=True,
         secure=COOKIE_SECURE,
         samesite="lax",
-        max_age=3600
+        max_age=3600,
+        domain=cookie_domain
     )
     response.set_cookie(
         "x-auth-email",
@@ -405,8 +482,10 @@ def auth_callback(request: Request):
         httponly=True,
         secure=COOKIE_SECURE,
         samesite="lax",
-        max_age=3600
+        max_age=3600,
+        domain=cookie_domain
     )
+    logger.debug(f"/auth/callback: set cookies and redirecting to: {next_path}")
     return response
 
 @app.get("/logout")

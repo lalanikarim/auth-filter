@@ -15,6 +15,7 @@ class UserGroup(Base):
     group_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    protected: Mapped[bool] = mapped_column(Integer, default=0, nullable=False)  # 0=False, 1=True
     # Relationship to users via association table
     users = relationship("User", secondary="user_group_members", back_populates="groups")
     # Relationship to url_groups via association table
@@ -33,6 +34,7 @@ class UrlGroup(Base):
     group_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    protected: Mapped[bool] = mapped_column(Integer, default=0, nullable=False)  # 0=False, 1=True
     # Relationship to urls
     urls = relationship("Url", back_populates="url_group")
     # Relationship to user_groups via association table
