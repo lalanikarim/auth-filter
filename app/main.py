@@ -327,11 +327,13 @@ async def authorize_check(request: Request, email: str = Form(None), url_path: s
     allowed = await is_user_allowed(session, email, url_path)
     return templates.TemplateResponse("authorize.html", {"request": request, "allowed": allowed, "email": email, "url_path": url_path, "user": user})
 
+def is_safe_next_path(url: str) -> bool:
+    return url.startswith("/") or url.startswith("http://") or url.startswith("https://")
+
 @app.get("/auth/login")
 def auth_login(request: Request):
     next_path = request.query_params.get("next", "/")
-    # Only allow relative paths for security
-    if not next_path.startswith("/"):
+    if not is_safe_next_path(next_path):
         next_path = "/"
     params = {
         "client_id": OAUTH2_CLIENT_ID,
@@ -350,7 +352,7 @@ def auth_callback(request: Request):
     code = request.query_params.get("code")
     state = request.query_params.get("state", "%2F")
     next_path = unquote(unquote(state))
-    if not next_path.startswith("/"):
+    if not is_safe_next_path(next_path):
         next_path = "/"
     if not code:
         return HTMLResponse("Missing code", status_code=400)
