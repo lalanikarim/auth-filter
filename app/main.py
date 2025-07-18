@@ -1,8 +1,11 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Request, Form, Depends, status, Body, Cookie, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from .db import engine, Base
+from .db import get_engine, Base
 import asyncio
 from app.api.endpoints import auth_router
 from app.api.endpoints import user_groups_router
@@ -21,7 +24,6 @@ from sqlalchemy import delete
 from app.models import user_group_members, Url
 from app.models import UserGroup, UrlGroup
 import os
-from dotenv import load_dotenv
 import requests
 from urllib.parse import urlencode, quote, unquote, urlparse
 from jose import jwt, JWTError
@@ -29,7 +31,6 @@ import json
 import time
 import logging
 
-load_dotenv()
 
 OAUTH2_CLIENT_ID = os.getenv("OAUTH2_CLIENT_ID", "your-client-id")
 OAUTH2_CLIENT_SECRET = os.getenv("OAUTH2_CLIENT_SECRET", "your-client-secret")
@@ -60,14 +61,28 @@ async def on_startup():
     #     async with engine.begin() as conn:
     #         await conn.run_sync(Base.metadata.create_all)
 
+    # Debug: Print environment variables
+    run_migrations_env = os.getenv("RUN_MIGRATIONS", "false")
+    database_url = os.getenv("DATABASE_URL", "not set")
+    print(f"DEBUG: RUN_MIGRATIONS = {run_migrations_env}")
+    print(f"DEBUG: DATABASE_URL = {database_url}")
+    
+    # Run migrations if explicitly requested
+    if run_migrations_env.lower() == "true":
+        print("DEBUG: Running migrations...")
+        await run_migrations()
+    else:
+        print("DEBUG: Skipping migrations (RUN_MIGRATIONS != 'true')")
+
     # Ensure internal groups exist
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.future import select
     from app.models import UserGroup, UrlGroup
     from sqlalchemy.orm import sessionmaker
 
-    # Use a synchronous session for startup
-    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    # Use an async session for startup
+    from app.db import get_async_session_maker
+    async_session = get_async_session_maker()
     async with async_session() as session:
         # Internal User Group
         internal_user_group_name = "Internal User Group"
@@ -95,6 +110,40 @@ async def on_startup():
             group.protected = 1
         await session.commit()
 
+async def run_migrations():
+    """Run Alembic migrations if requested via environment variable."""
+    import subprocess
+    import sys
+    try:
+        print("Running Alembic migrations...")
+        print(f"DEBUG: Current working directory: {os.getcwd()}")
+        print(f"DEBUG: Environment variables in subprocess:")
+        for key, value in os.environ.items():
+            if key in ['RUN_MIGRATIONS', 'DATABASE_URL', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT', 'DB_NAME']:
+                print(f"  {key} = {value}")
+        
+        result = subprocess.run(
+            ["uv", "run", "alembic", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=os.environ.copy()  # Pass current environment variables including those from .env
+        )
+        print("Migrations completed successfully")
+        print(f"Output: {result.stdout}")
+    except subprocess.CalledProcessError as e:
+        print(f"Migration failed: {e}")
+        print(f"stdout: {e.stdout}")
+        print(f"stderr: {e.stderr}")
+        print("Exiting application due to migration failure")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error during migration: {e}")
+        import traceback
+        traceback.print_exc()
+        print("Exiting application due to migration error")
+        sys.exit(1)
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     return templates.TemplateResponse("base.html", {"request": request})
@@ -106,9 +155,14 @@ async def user_groups(request: Request, session: AsyncSession = Depends(get_asyn
     groups = result.fetchall()
     # Fetch users in each group
     user_map = defaultdict(list)
-    user_rows = await session.execute(text("SELECT user_group_id, user_email FROM user_group_members ORDER BY user_group_id, user_email"))
+    user_rows = await session.execute(text("""
+        SELECT ugm.user_group_id, u.email 
+        FROM user_group_members ugm 
+        JOIN users u ON ugm.user_id = u.user_id 
+        ORDER BY ugm.user_group_id, u.email
+    """))
     for row in user_rows:
-        user_map[row.user_group_id].append(row.user_email)
+        user_map[row.user_group_id].append(row.email)
     # Fetch associations for delete button logic and for url group lookup
     assoc_rows = await session.execute(text('''
         SELECT a.user_group_id, a.url_group_id
@@ -172,8 +226,11 @@ async def add_user_to_group(request: Request, group_id: int, email: str = Form(.
 
 @app.post("/user-groups/{group_id}/remove-user")
 async def remove_user_from_group(request: Request, group_id: int, email: str = Form(...), session: AsyncSession = Depends(get_async_session)):
-    await session.execute(delete(user_group_members).where(user_group_members.c.user_group_id == group_id, user_group_members.c.user_email == email))
-    await session.commit()
+    # First get the user by email
+    user = await crud.get_user(session, email)
+    if user:
+        await session.execute(delete(user_group_members).where(user_group_members.c.user_group_id == group_id, user_group_members.c.user_id == user.user_id))
+        await session.commit()
     return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/user-groups/{group_id}/delete")
@@ -363,24 +420,30 @@ async def get_current_user_from_cookie(auth_token: str = Cookie(None)):
     except JWTError as e:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Protect /authorize UI
+# /authorize UI - no authentication required
 @app.get("/authorize", response_class=HTMLResponse)
-async def authorize_page(request: Request, user=Depends(get_current_user_from_cookie)):
+async def authorize_page(request: Request):
     next_path = request.query_params.get("next", None)
     url_path = request.query_params.get("url_path", "")
     email = request.query_params.get("email", "")
-    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": None, "user": user, "next": next_path, "url_path": url_path, "email": email})
+    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": None, "user": None, "next": next_path, "url_path": url_path, "email": email})
 
 @app.post("/authorize", response_class=HTMLResponse)
-async def authorize_check(request: Request, email: str = Form(None), url_path: str = Form(None), session: AsyncSession = Depends(get_async_session), user=Depends(get_current_user_from_cookie)):
+async def authorize_check(request: Request, email: str = Form(None), url_path: str = Form(None), session: AsyncSession = Depends(get_async_session)):
     # Fallback to query string if not present in form
     if not url_path:
         url_path = request.query_params.get("url_path", "")
     if not email:
         email = request.query_params.get("email", "")
-    from app.crud import is_user_allowed
-    allowed = await is_user_allowed(session, email, url_path)
-    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": allowed, "email": email, "url_path": url_path, "user": user})
+    
+    # Check if URL is a web asset file that should bypass authentication/authorization
+    from app.crud import is_web_asset, is_user_allowed
+    if is_web_asset(url_path):
+        allowed = True
+    else:
+        allowed = await is_user_allowed(session, email, url_path)
+    
+    return templates.TemplateResponse("authorize.html", {"request": request, "allowed": allowed, "email": email, "url_path": url_path, "user": None})
 
 def is_safe_next_path(url: str) -> bool:
     return url.startswith("/") or url.startswith("http://") or url.startswith("https://")

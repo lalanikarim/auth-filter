@@ -5,7 +5,8 @@ from .db import Base
 
 class User(Base):
     __tablename__ = "users"
-    email: Mapped[str] = mapped_column(String(255), primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     # Relationship to user_groups via association table
     groups = relationship("UserGroup", secondary="user_group_members", back_populates="users")
@@ -26,7 +27,9 @@ user_group_members = Table(
     "user_group_members",
     Base.metadata,
     Column("user_group_id", Integer, ForeignKey("user_groups.group_id"), primary_key=True),
-    Column("user_email", String(255), ForeignKey("users.email"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.user_id"), primary_key=True),
+    # Composite unique constraint: user can only be in a group once
+    UniqueConstraint('user_group_id', 'user_id', name='uq_user_group_member'),
 )
 
 class UrlGroup(Base):
@@ -43,9 +46,14 @@ class UrlGroup(Base):
 class Url(Base):
     __tablename__ = "urls"
     url_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    path: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    path: Mapped[str] = mapped_column(String(255), nullable=False)
     url_group_id: Mapped[int] = mapped_column(Integer, ForeignKey("url_groups.group_id"))
     url_group = relationship("UrlGroup", back_populates="urls")
+    
+    # Composite unique constraint: path must be unique within a url_group
+    __table_args__ = (
+        UniqueConstraint('path', 'url_group_id', name='uq_url_path_per_group'),
+    )
 
 # Association table for user_groups <-> url_groups (many-to-many)
 user_group_url_group_associations = Table(

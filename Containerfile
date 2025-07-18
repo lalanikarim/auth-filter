@@ -9,10 +9,14 @@ WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml ./
+COPY README.md ./
 COPY app ./app
 
 # Install dependencies
 RUN uv pip install --system .
+
+COPY alembic.ini ./
+COPY alembic ./alembic
 
 # Copy entrypoint (if any) and .env (optional, for local dev only)
 # COPY .env .

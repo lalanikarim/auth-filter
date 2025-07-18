@@ -3,6 +3,34 @@ from sqlalchemy.future import select
 from sqlalchemy import insert, update, delete, and_
 from .models import User, UserGroup, UrlGroup, Url, user_group_members, user_group_url_group_associations
 from typing import Optional
+import os
+
+# Web asset file extensions that should bypass authentication/authorization checks
+ALLOWED_WEB_ASSET_EXTENSIONS = os.getenv("ALLOWED_WEB_ASSET_EXTENSIONS", "css,js,png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot,map").split(",")
+
+def is_web_asset(url_path: str) -> bool:
+    """
+    Check if the URL path is a web asset file that should bypass authentication/authorization checks.
+    
+    Args:
+        url_path: The URL path to check
+        
+    Returns:
+        True if the URL path is a web asset file, False otherwise
+    """
+    if not url_path:
+        return False
+    
+    # Remove query parameters and fragments
+    clean_path = url_path.split('?')[0].split('#')[0]
+    
+    # Extract file extension from URL path
+    path_parts = clean_path.split('.')
+    if len(path_parts) < 2:
+        return False
+    
+    file_extension = path_parts[-1].lower()
+    return file_extension in [ext.strip().lower() for ext in ALLOWED_WEB_ASSET_EXTENSIONS]
 
 # User CRUD
 async def create_user(session: AsyncSession, email: str) -> User:
@@ -30,7 +58,12 @@ async def get_user_group(session: AsyncSession, group_id: int) -> Optional[UserG
 
 # Add user to user group
 async def add_user_to_group(session: AsyncSession, group_id: int, email: str) -> bool:
-    stmt = insert(user_group_members).values(user_group_id=group_id, user_email=email).prefix_with("OR IGNORE")
+    # First get the user by email
+    user = await get_user(session, email)
+    if not user:
+        return False
+    
+    stmt = insert(user_group_members).values(user_group_id=group_id, user_id=user.user_id).prefix_with("IGNORE")
     await session.execute(stmt)
     await session.commit()
     return True
@@ -56,7 +89,7 @@ async def add_url_to_group(session: AsyncSession, group_id: int, path: str) -> b
 
 # Link user group to url group
 async def link_user_group_to_url_group(session: AsyncSession, user_group_id: int, url_group_id: int) -> bool:
-    stmt = insert(user_group_url_group_associations).values(user_group_id=user_group_id, url_group_id=url_group_id).prefix_with("OR IGNORE")
+    stmt = insert(user_group_url_group_associations).values(user_group_id=user_group_id, url_group_id=url_group_id).prefix_with("IGNORE")
     await session.execute(stmt)
     await session.commit()
     return True
@@ -86,7 +119,7 @@ async def is_user_allowed(session: AsyncSession, email: str, url_path: str) -> b
     # Check if user is in Internal User Group (superuser)
     q = (
         select(User)
-        .join(user_group_members, User.email == user_group_members.c.user_email)
+        .join(user_group_members, User.user_id == user_group_members.c.user_id)
         .join(UserGroup, user_group_members.c.user_group_id == UserGroup.group_id)
         .where(User.email == email, UserGroup.name == "Internal User Group", UserGroup.protected == 1)
     )
@@ -97,7 +130,7 @@ async def is_user_allowed(session: AsyncSession, email: str, url_path: str) -> b
     # Default: normal group-based check
     q = (
         select(User)
-        .join(user_group_members, User.email == user_group_members.c.user_email)
+        .join(user_group_members, User.user_id == user_group_members.c.user_id)
         .join(UserGroup, user_group_members.c.user_group_id == UserGroup.group_id)
         .join(user_group_url_group_associations, UserGroup.group_id == user_group_url_group_associations.c.user_group_id)
         .join(UrlGroup, user_group_url_group_associations.c.url_group_id == UrlGroup.group_id)

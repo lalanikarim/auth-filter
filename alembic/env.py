@@ -1,9 +1,14 @@
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -41,7 +46,31 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # Use DATABASE_URL environment variable if available
+    url = os.getenv("DATABASE_URL")
+    
+    # If DATABASE_URL is not set, try to construct it from individual env vars
+    if not url:
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST", "127.0.0.1")
+        db_port = os.getenv("DB_PORT", "3306")
+        db_name = os.getenv("DB_NAME")
+        
+        if all([db_user, db_password, db_name]):
+            # URL encode the password to handle special characters
+            import urllib.parse
+            encoded_password = urllib.parse.quote_plus(db_password)
+            url = f"mysql+pymysql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
+    
+    # Convert async URLs to sync URLs for Alembic
+    if url and url.startswith("mysql+aiomysql://"):
+        url = url.replace("mysql+aiomysql://", "mysql+pymysql://")
+    
+    # Fall back to config if no environment variables are set
+    if not url:
+        url = config.get_main_option("sqlalchemy.url") or config.attributes.get('sqlalchemy.url')
+    
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -60,8 +89,36 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Use DATABASE_URL environment variable if available
+    database_url = os.getenv("DATABASE_URL")
+    
+    # If DATABASE_URL is not set, try to construct it from individual env vars
+    if not database_url:
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST", "127.0.0.1")
+        db_port = os.getenv("DB_PORT", "3306")
+        db_name = os.getenv("DB_NAME")
+        
+        if all([db_user, db_password, db_name]):
+            # URL encode the password to handle special characters
+            import urllib.parse
+            encoded_password = urllib.parse.quote_plus(db_password)
+            database_url = f"mysql+pymysql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
+    
+    # Convert async URLs to sync URLs for Alembic
+    if database_url and database_url.startswith("mysql+aiomysql://"):
+        database_url = database_url.replace("mysql+aiomysql://", "mysql+pymysql://")
+    
+    if database_url:
+        # Override the sqlalchemy.url in the config
+        # Use a different approach to avoid interpolation issues
+        config.attributes['sqlalchemy.url'] = database_url
+    
+    config_dict = config.get_section(config.config_ini_section, {})
+    config_dict['sqlalchemy.url'] = database_url
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        config_dict,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

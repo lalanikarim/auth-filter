@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiofiles>=24.1.0",
-    "aiosqlite>=0.21.0",
+    "aiomysql>=0.2.0",
+    "aiosqlite>=0.20.0",
     "alembic>=1.16.4",
     "email-validator>=2.2.0",
     "fastapi>=0.116.1",
@@ -24,3 +25,19 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "uvicorn>=0.35.0",
 ]
+
+[project.scripts]
+build-image = "scripts.build_image:main"
+push-image = "scripts.push_image:main"
+build-and-push-image = "scripts.build_and_push_image:main"
+retag-latest = "scripts.retag_latest:main"
+dev = "uvicorn:run"
+test = "pytest:main"
+migrate = "alembic:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

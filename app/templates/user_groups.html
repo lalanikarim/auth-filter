@@ -19,7 +19,7 @@
       {% endfor %}
     </ul>
     <div class="center-align" style="margin-top: 2rem;">
-      <a class="btn green modal-trigger" href="#new-group-modal"><i class="material-icons left">group_add</i>New Group</a>
+      <a class="btn green modal-trigger" href="#new-group-modal"><i class="material-icons left">group_add</i>New</a>
     </div>
   </div>
   <!-- Main Panel -->
@@ -70,6 +70,7 @@
           </div>
         </div>
         <!-- Right: Associated URL Groups -->
+        {% if selected_group.name != 'Internal User Group' %}
         <div class="col s12 m6">
           <h6>Associated URL Groups</h6>
           <ul class="collection">
@@ -115,6 +116,17 @@
           </script>
           {% endif %}
         </div>
+        {% else %}
+        <div class="col s12 m6">
+          <h6>Associated URL Groups</h6>
+          <div class="card-panel blue lighten-5">
+            <p class="blue-text text-darken-2">
+              <i class="material-icons left">info</i>
+              The 'Internal User Group' is a special system group that cannot be associated with URL groups.
+            </p>
+          </div>
+        </div>
+        {% endif %}
       </div>
       {% if selected_group and not selected_group.protected and selected_group.group_id not in associated_user_group_ids and selected_group.name != 'Internal User Group' %}
       <form method="post" action="/user-groups/{{ selected_group.group_id }}/delete" style="margin-top: 2rem;">

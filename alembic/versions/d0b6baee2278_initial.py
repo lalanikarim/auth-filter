@@ -1,8 +1,8 @@
-"""initial schema with protected columns
+"""initial
 
-Revision ID: 05c98e3f8e3c
+Revision ID: d0b6baee2278
 Revises: 
-Create Date: 2025-07-17 07:54:50.419014
+Create Date: 2025-07-18 00:38:31.010366
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '05c98e3f8e3c'
+revision: str = 'd0b6baee2278'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table('url_groups',
     sa.Column('group_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('protected', sa.Integer(), nullable=False),
     sa.PrimaryKeyConstraint('group_id'),
     sa.UniqueConstraint('name')
@@ -32,15 +32,16 @@ def upgrade() -> None:
     op.create_table('user_groups',
     sa.Column('group_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('protected', sa.Integer(), nullable=False),
     sa.PrimaryKeyConstraint('group_id'),
     sa.UniqueConstraint('name')
     )
     op.create_table('users',
+    sa.Column('user_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('email', sa.String(length=255), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
-    sa.PrimaryKeyConstraint('email')
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('user_id')
     )
     op.create_table('urls',
     sa.Column('url_id', sa.Integer(), autoincrement=True, nullable=False),
@@ -48,14 +49,15 @@ def upgrade() -> None:
     sa.Column('url_group_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['url_group_id'], ['url_groups.group_id'], ),
     sa.PrimaryKeyConstraint('url_id'),
-    sa.UniqueConstraint('path')
+    sa.UniqueConstraint('path', 'url_group_id', name='uq_url_path_per_group')
     )
     op.create_table('user_group_members',
     sa.Column('user_group_id', sa.Integer(), nullable=False),
-    sa.Column('user_email', sa.String(length=255), nullable=False),
-    sa.ForeignKeyConstraint(['user_email'], ['users.email'], ),
+    sa.Column('user_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['user_group_id'], ['user_groups.group_id'], ),
-    sa.PrimaryKeyConstraint('user_group_id', 'user_email')
+    sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ),
+    sa.PrimaryKeyConstraint('user_group_id', 'user_id'),
+    sa.UniqueConstraint('user_group_id', 'user_id', name='uq_user_group_member')
     )
     op.create_table('user_group_url_group_associations',
     sa.Column('user_group_id', sa.Integer(), nullable=False),

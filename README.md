@@ -41,6 +41,7 @@ OAUTH2_SCOPE=openid email profile
 OAUTH2_REDIRECT_URI=http://localhost:8000/auth/callback
 DATABASE_URL=sqlite+aiosqlite:///./authfilter.db
 APP_ENV=development  # Set to 'production' for secure cookies (see below)
+ALLOWED_WEB_ASSET_EXTENSIONS=css,js,png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot,map
 ```
 
 ### 4. Run the App
@@ -71,7 +72,7 @@ Visit [http://localhost:8000](http://localhost:8000) in your browser.
 - `/user-groups` — Manage user groups and their members
 - `/url-groups` — Manage URL groups and their URLs
 - `/associations` — Link user groups to URL groups
-- `/authorize` — Manual authorization check UI
+- `/authorize` — Manual authorization check UI (no authentication required)
 
 ## Database
 - Uses SQLite by default (file: `authfilter.db`)
@@ -82,6 +83,7 @@ Visit [http://localhost:8000](http://localhost:8000) in your browser.
 All OAuth2/OIDC and DB settings are configured via `.env` (see above).
 
 - `APP_ENV=production` will set cookies with `secure=True` (required for HTTPS deployments). Use `APP_ENV=development` for local testing (cookies will be set with `secure=False`).
+- `ALLOWED_WEB_ASSET_EXTENSIONS` is a comma-separated list of file extensions that should bypass authentication/authorization checks (default: `css,js,png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot,map`). Web assets can be accessed without any authentication.
 
 ## Development & Testing
 - Run tests with:

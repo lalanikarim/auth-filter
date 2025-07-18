@@ -70,6 +70,7 @@
           </div>
         </div>
         <!-- Right: Associated User Groups -->
+        {% if selected_group.name != 'Everyone' and selected_group.name != 'Authenticated' %}
         <div class="col s12 m6">
           <h6>Associated User Groups</h6>
           <ul class="collection">
@@ -115,6 +116,21 @@
           </script>
           {% endif %}
         </div>
+        {% else %}
+        <div class="col s12 m6">
+          <h6>Associated User Groups</h6>
+          <div class="card-panel blue lighten-5">
+            <p class="blue-text text-darken-2">
+              <i class="material-icons left">info</i>
+              {% if selected_group.name == 'Everyone' %}
+                The 'Everyone' group automatically includes all users and cannot be associated with specific user groups.
+              {% elif selected_group.name == 'Authenticated' %}
+                The 'Authenticated' group automatically includes all authenticated users and cannot be associated with specific user groups.
+              {% endif %}
+            </p>
+          </div>
+        </div>
+        {% endif %}
       </div>
       {% if selected_group and not selected_group.protected and selected_group.group_id not in associated_url_group_ids and selected_group.name != 'Everyone' and selected_group.name != 'Authenticated' %}
       <form method="post" action="/url-groups/{{ selected_group.group_id }}/delete" style="margin-top: 2rem;">
