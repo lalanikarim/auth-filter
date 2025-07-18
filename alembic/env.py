@@ -59,6 +59,7 @@ def run_migrations_offline() -> None:
         
         if all([db_user, db_password, db_name]):
             # URL encode the password to handle special characters
+            # Note: This URL construction is for internal use only and is not logged
             import urllib.parse
             encoded_password = urllib.parse.quote_plus(db_password)
             url = f"mysql+pymysql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
@@ -102,6 +103,7 @@ def run_migrations_online() -> None:
         
         if all([db_user, db_password, db_name]):
             # URL encode the password to handle special characters
+            # Note: This URL construction is for internal use only and is not logged
             import urllib.parse
             encoded_password = urllib.parse.quote_plus(db_password)
             database_url = f"mysql+pymysql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"

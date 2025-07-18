@@ -54,6 +54,10 @@ templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger("authfilter")
 logging.basicConfig(level=logging.DEBUG)
 
+# Use sanitized logger to automatically mask sensitive information
+from app.utils import SanitizedLogger, sanitize_url, sanitize_email
+logger = SanitizedLogger(logger)
+
 @app.on_event("startup")
 async def on_startup():
     # Auto-create tables in dev (SQLite). In prod, use Alembic for migrations.
@@ -61,11 +65,12 @@ async def on_startup():
     #     async with engine.begin() as conn:
     #         await conn.run_sync(Base.metadata.create_all)
 
-    # Debug: Print environment variables
+    # Debug: Print environment variables (sanitized)
     run_migrations_env = os.getenv("RUN_MIGRATIONS", "false")
     database_url = os.getenv("DATABASE_URL", "not set")
+    from app.utils import sanitize_database_url
     print(f"DEBUG: RUN_MIGRATIONS = {run_migrations_env}")
-    print(f"DEBUG: DATABASE_URL = {database_url}")
+    print(f"DEBUG: DATABASE_URL = {sanitize_database_url(database_url)}")
     
     # Run migrations if explicitly requested
     if run_migrations_env.lower() == "true":
@@ -118,9 +123,12 @@ async def run_migrations():
         print("Running Alembic migrations...")
         print(f"DEBUG: Current working directory: {os.getcwd()}")
         print(f"DEBUG: Environment variables in subprocess:")
-        for key, value in os.environ.items():
-            if key in ['RUN_MIGRATIONS', 'DATABASE_URL', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT', 'DB_NAME']:
-                print(f"  {key} = {value}")
+        from app.utils import sanitize_environment_variables
+        sensitive_env_vars = {k: v for k, v in os.environ.items() 
+                            if k in ['RUN_MIGRATIONS', 'DATABASE_URL', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT', 'DB_NAME']}
+        sanitized_env_vars = sanitize_environment_variables(sensitive_env_vars)
+        for key, value in sanitized_env_vars.items():
+            print(f"  {key} = {value}")
         
         result = subprocess.run(
             ["uv", "run", "alembic", "upgrade", "head"],
@@ -133,8 +141,10 @@ async def run_migrations():
         print(f"Output: {result.stdout}")
     except subprocess.CalledProcessError as e:
         print(f"Migration failed: {e}")
-        print(f"stdout: {e.stdout}")
-        print(f"stderr: {e.stderr}")
+        # Sanitize stdout/stderr to avoid logging sensitive information
+        from app.utils import sanitize_log_message
+        print(f"stdout: {sanitize_log_message(e.stdout)}")
+        print(f"stderr: {sanitize_log_message(e.stderr)}")
         print("Exiting application due to migration failure")
         sys.exit(1)
     except Exception as e:
@@ -467,7 +477,7 @@ def auth_login(request: Request):
         "state": quote(next_path),
     }
     url = f"{OAUTH2_AUTH_URL}?{urlencode(params)}"
-    logger.debug(f"/auth/login: redirecting to OAuth2 URL: {url}")
+    logger.debug(f"/auth/login: redirecting to OAuth2 URL: {sanitize_url(url, ['code', 'state'])}")
     return RedirectResponse(url)
 
 @app.get("/auth/callback")
@@ -475,7 +485,7 @@ def auth_callback(request: Request):
     code = request.query_params.get("code")
     state = request.query_params.get("state", "%2F")
     next_path = unquote(unquote(state))
-    logger.debug(f"/auth/callback: received state param: {state}, decoded next_path: {next_path}")
+    logger.debug(f"/auth/callback: received state param: ***, decoded next_path: {next_path}")
     if not is_safe_next_path(next_path):
         logger.debug(f"/auth/callback: next_path '{next_path}' is not safe, defaulting to '/'")
         next_path = "/"
@@ -491,11 +501,11 @@ def auth_callback(request: Request):
         "redirect_uri": REDIRECT_URI,
         "grant_type": "authorization_code",
     }
-    logger.debug(f"/auth/callback: exchanging code for token at {OAUTH2_TOKEN_URL}")
+    logger.debug(f"/auth/callback: exchanging code for token at {sanitize_url(OAUTH2_TOKEN_URL)}")
     token_resp = requests.post(OAUTH2_TOKEN_URL, data=data)
     if not token_resp.ok:
-        logger.error(f"/auth/callback: OAuth2 token exchange error: {token_resp.text}")
-        return HTMLResponse(f"Token exchange failed: {token_resp.text}", status_code=400)
+        logger.error(f"/auth/callback: OAuth2 token exchange error: ***")
+        return HTMLResponse("Token exchange failed", status_code=400)
     token_data = token_resp.json()
     id_token = token_data.get("id_token")
     if not id_token:
@@ -516,10 +526,10 @@ def auth_callback(request: Request):
         if not email:
             logger.error("/auth/callback: No email in token payload")
             return HTMLResponse("No email in token", status_code=400)
-        logger.debug(f"/auth/callback: extracted email: {email}")
+        logger.debug(f"/auth/callback: extracted email: {sanitize_email(email)}")
     except Exception as e:
-        logger.error(f"/auth/callback: Token decode error: {str(e)}")
-        return HTMLResponse(f"Token decode error: {str(e)}", status_code=400)
+        logger.error(f"/auth/callback: Token decode error: ***")
+        return HTMLResponse("Token decode error", status_code=400)
     # Determine cookie domain
     cookie_domain = None
     if next_path.startswith("http://") or next_path.startswith("https://"):
