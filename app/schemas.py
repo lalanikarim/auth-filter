@@ -12,7 +12,7 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     created_at: datetime
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # UserGroup schemas
 class UserGroupBase(BaseModel):
@@ -26,11 +26,28 @@ class UserGroupRead(UserGroupBase):
     created_at: datetime
     users: Optional[List[UserRead]] = None
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+# Application schemas
+class ApplicationBase(BaseModel):
+    name: str
+    host: str
+    description: Optional[str] = None
+
+class ApplicationCreate(ApplicationBase):
+    pass
+
+class ApplicationRead(ApplicationBase):
+    app_id: int
+    created_at: datetime
+    url_groups: Optional[List['UrlGroupRead']] = None
+    class Config:
+        from_attributes = True
 
 # UrlGroup schemas
 class UrlGroupBase(BaseModel):
     name: str
+    app_id: Optional[int] = None
 
 class UrlGroupCreate(UrlGroupBase):
     pass
@@ -38,9 +55,11 @@ class UrlGroupCreate(UrlGroupBase):
 class UrlGroupRead(UrlGroupBase):
     group_id: int
     created_at: datetime
+    app_id: Optional[int] = None
+    application: Optional[ApplicationRead] = None
     urls: Optional[List['UrlRead']] = None
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Url schemas
 class UrlBase(BaseModel):
@@ -53,7 +72,7 @@ class UrlRead(UrlBase):
     url_id: int
     url_group_id: Optional[int]
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Association schemas
 class UserGroupUrlGroupAssociationCreate(BaseModel):
@@ -79,3 +98,4 @@ class AuthorizeResponse(BaseModel):
 
 # For forward references
 UrlGroupRead.update_forward_refs()
+ApplicationRead.update_forward_refs()

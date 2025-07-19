@@ -1,0 +1,42 @@
+<div class="divide-y divide-gray-200">
+    {% if users %}
+    {% for user in users %}
+    <div class="px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 h-8 w-8">
+                    <div class="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
+                        <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-gray-900">{{ user }}</p>
+                    <p class="text-sm text-gray-500">User</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button 
+                    class="text-red-600 hover:text-red-900 text-sm font-medium"
+                    hx-delete="/user-groups/{{ group.group_id }}/remove-user"
+                    hx-target="#users-list"
+                    hx-swap="outerHTML"
+                    hx-vals='{"email": "{{ user }}"}'
+                    hx-confirm="Are you sure you want to remove this user from the group?">
+                    Remove
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="px-6 py-12 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No users</h3>
+        <p class="mt-1 text-sm text-gray-500">Get started by adding users to this group.</p>
+    </div>
+    {% endif %}
+</div> 

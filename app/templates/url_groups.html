@@ -59,7 +59,7 @@
           <div id="add-url-modal-{{ selected_group.group_id }}" class="modal">
             <div class="modal-content">
               <h5>Add URL to {{ selected_group.name }}</h5>
-              <form method="post" action="/url-groups/{{ selected_group.group_id }}/add-url">
+              <form hx-post="/url-groups/{{ selected_group.group_id }}/add-url" hx-target="#modal-content" hx-swap="innerHTML">
                 <div class="input-field">
                   <input type="text" name="path" id="add-url-path-{{ selected_group.group_id }}" required>
                   <label for="add-url-path-{{ selected_group.group_id }}">URL Path</label>
@@ -163,6 +163,34 @@
   document.addEventListener('DOMContentLoaded', function() {
     var elems = document.querySelectorAll('.modal');
     M.Modal.init(elems);
+  });
+
+  // Global event listener to handle URL add/remove success
+  document.addEventListener('htmx:afterRequest', function(event) {
+    // Handle URL add success
+    if (event.detail.successful && event.detail.xhr && event.detail.xhr.responseURL && event.detail.xhr.responseURL.includes('/url-groups/') && event.detail.xhr.responseURL.includes('/add-url')) {
+      // Close modal immediately
+      var modal = document.querySelector('.modal.open');
+      if (modal) {
+        var instance = M.Modal.getInstance(modal);
+        if (instance) {
+          instance.close();
+        }
+      }
+      
+      // Reload page to show updated data
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    }
+    
+    // Handle URL remove success
+    if (event.detail.successful && event.detail.xhr && event.detail.xhr.responseURL && event.detail.xhr.responseURL.includes('/url-groups/') && event.detail.xhr.responseURL.includes('/remove-url')) {
+      // Reload page to show updated data
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    }
   });
 </script>
 {% endblock %} 

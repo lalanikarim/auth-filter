@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AuthFilter</title>
-    <!-- Materialize CSS CDN -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
-    <!-- Material Icons -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <title>{% block title %}AuthFilter{% endblock %}</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <!-- htmx CDN -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 </head>
-<body class="grey lighten-4">
-    <nav class="blue darken-2">
-        <div class="nav-wrapper container">
-            <a href="/" class="brand-logo">AuthFilter</a>
-            <ul id="nav-mobile" class="right hide-on-med-and-down">
-                <li><a href="/user-groups">User Groups</a></li>
-                <li><a href="/url-groups">URL Groups</a></li>
-                <li><a href="/associations">Associations</a></li>
-                <li><a href="/authorize">Authorization</a></li>
-            </ul>
+<body class="bg-gray-50">
+    <nav class="bg-blue-600 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-white font-bold text-xl">AuthFilter</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/applications" class="text-white hover:text-blue-100 px-3 py-2 rounded-md text-sm font-medium">Applications</a>
+                    <a href="/user-groups" class="text-white hover:text-blue-100 px-3 py-2 rounded-md text-sm font-medium">User Groups</a>
+                    <a href="/associations" class="text-white hover:text-blue-100 px-3 py-2 rounded-md text-sm font-medium">Associations</a>
+                    <a href="/authorize" class="text-white hover:text-blue-100 px-3 py-2 rounded-md text-sm font-medium">Authorization</a>
+                </div>
+            </div>
         </div>
     </nav>
-    <main class="container" style="margin-top: 2rem;">
+    <main>
         {% block content %}{% endblock %}
     </main>
-    <!-- Materialize JS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
 </body>
 </html>

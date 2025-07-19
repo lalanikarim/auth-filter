@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, Uni
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 from .db import Base
+from typing import Optional
 
 class User(Base):
     __tablename__ = "users"
@@ -32,16 +33,34 @@ user_group_members = Table(
     UniqueConstraint('user_group_id', 'user_id', name='uq_user_group_member'),
 )
 
+class Application(Base):
+    __tablename__ = "applications"
+    app_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    host: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    # Relationship to url_groups
+    url_groups = relationship("UrlGroup", back_populates="application")
+
 class UrlGroup(Base):
     __tablename__ = "url_groups"
     group_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     protected: Mapped[bool] = mapped_column(Integer, default=0, nullable=False)  # 0=False, 1=True
+    app_id: Mapped[int] = mapped_column(Integer, ForeignKey("applications.app_id"), nullable=True)
+    # Relationship to application
+    application = relationship("Application", back_populates="url_groups")
     # Relationship to urls
     urls = relationship("Url", back_populates="url_group")
     # Relationship to user_groups via association table
     user_groups = relationship("UserGroup", secondary="user_group_url_group_associations", back_populates="url_groups")
+    
+    # Composite unique constraint: name must be unique within an application (or globally if no app)
+    __table_args__ = (
+        UniqueConstraint('name', 'app_id', name='uq_url_group_name_per_app'),
+    )
 
 class Url(Base):
     __tablename__ = "urls"

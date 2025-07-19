@@ -12,6 +12,7 @@ from app.api.endpoints import user_groups_router
 from app.api.endpoints import url_groups_router
 from app.api.endpoints import associations_router
 from app.api.endpoints import authorize_router
+from app.api.endpoints import applications_router
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 from app.db import get_async_session
@@ -155,93 +156,256 @@ async def run_migrations():
         sys.exit(1)
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    return templates.TemplateResponse("base.html", {"request": request})
-
-@app.get("/user-groups")
-async def user_groups(request: Request, session: AsyncSession = Depends(get_async_session)):
-    selected = request.query_params.get("selected")
-    result = await session.execute(text("SELECT group_id, name FROM user_groups ORDER BY group_id"))
-    groups = result.fetchall()
-    # Fetch users in each group
-    user_map = defaultdict(list)
-    user_rows = await session.execute(text("""
-        SELECT ugm.user_group_id, u.email 
-        FROM user_group_members ugm 
-        JOIN users u ON ugm.user_id = u.user_id 
-        ORDER BY ugm.user_group_id, u.email
-    """))
-    for row in user_rows:
-        user_map[row.user_group_id].append(row.email)
-    # Fetch associations for delete button logic and for url group lookup
-    assoc_rows = await session.execute(text('''
-        SELECT a.user_group_id, a.url_group_id
-        FROM user_group_url_group_associations a
-    '''))
-    associations = assoc_rows.fetchall()
-    associated_user_group_ids = set(row.user_group_id for row in associations)
-    # Fetch all url groups
-    url_group_rows = await session.execute(text("SELECT group_id, name FROM url_groups ORDER BY group_id"))
-    url_groups = url_group_rows.fetchall()
-    # Prepare selected group data
-    selected_group = None
-    selected_group_users = []
-    selected_group_url_group_ids = []
-    selected_group_url_groups = []
-    if selected:
-        try:
-            selected_id = int(selected)
-            selected_group = next((g for g in groups if g.group_id == selected_id), None)
-            if selected_group:
-                selected_group_users = user_map.get(selected_id, [])
-                selected_group_url_group_ids = [a.url_group_id for a in associations if a.user_group_id == selected_id]
-                selected_group_url_groups = [g for g in url_groups if g.group_id in selected_group_url_group_ids]
-        except Exception:
-            selected_group = None
-    return templates.TemplateResponse("user_groups.html", {
+async def root(request: Request, session: AsyncSession = Depends(get_async_session)):
+    """Dashboard page with links to all sections."""
+    # Get some basic stats
+    app_count = (await session.execute(text("SELECT COUNT(*) FROM applications"))).scalar()
+    user_group_count = (await session.execute(text("SELECT COUNT(*) FROM user_groups"))).scalar()
+    url_group_count = (await session.execute(text("SELECT COUNT(*) FROM url_groups"))).scalar()
+    user_count = (await session.execute(text("SELECT COUNT(*) FROM users"))).scalar()
+    
+    return templates.TemplateResponse("dashboard.html", {
         "request": request,
-        "groups": groups,
-        "users_in_group": user_map,
-        "associations": associations,
-        "associated_user_group_ids": associated_user_group_ids,
-        "url_groups": url_groups,
-        "selected_group": selected_group,
-        "selected_group_users": selected_group_users,
-        "selected_group_url_groups": selected_group_url_groups,
-        "selected": selected
+        "app_count": app_count,
+        "user_group_count": user_group_count,
+        "url_group_count": url_group_count,
+        "user_count": user_count
     })
 
-@app.post("/user-groups")
-async def create_user_group(request: Request, name: str = Form(...), session: AsyncSession = Depends(get_async_session)):
-    from sqlalchemy.exc import IntegrityError
+@app.get("/user-groups", response_class=HTMLResponse)
+async def user_groups(request: Request, session: AsyncSession = Depends(get_async_session)):
+    """User groups page."""
+    groups = await crud.get_all_user_groups(session)
+    
+    # Add user count to each group
+    for group in groups:
+        group.user_count = await crud.get_user_count_in_group(session, group.group_id)
+    
+    return templates.TemplateResponse("user_groups.html", {
+        "request": request,
+        "groups": groups
+    })
+
+@app.get("/user-groups/create-form", response_class=HTMLResponse)
+async def user_groups_create_form(request: Request):
+    """Get the user group creation form."""
+    return templates.TemplateResponse("partials/user_groups_create_form.html", {
+        "request": request
+    })
+
+@app.post("/user-groups", response_class=HTMLResponse)
+async def create_user_group_ui(
+    request: Request, 
+    name: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Create a new user group via UI."""
     try:
-        group = await crud.create_user_group(session, name)
-        group_id = group.group_id
-    except IntegrityError:
-        await session.rollback()
-        group_id = None
-        # Optionally, add flash message logic here
-    if group_id:
-        return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
-    return RedirectResponse(url="/user-groups", status_code=status.HTTP_303_SEE_OTHER)
+        await crud.create_user_group(session, name)
+        groups = await crud.get_all_user_groups(session)
+        
+        # Add user count to each group
+        for group in groups:
+            group.user_count = await crud.get_user_count_in_group(session, group.group_id)
+        
+        return templates.TemplateResponse("partials/user_groups_list.html", {
+            "request": request, 
+            "groups": groups
+        })
+    except ValueError as e:
+        # Return error message
+        return HTMLResponse(f"<div class='text-red-600 p-4'>{str(e)}</div>")
 
-@app.post("/user-groups/{group_id}/add-user")
-async def add_user_to_group(request: Request, group_id: int, email: str = Form(...), session: AsyncSession = Depends(get_async_session)):
-    # Ensure user exists or create
-    db_user = await crud.get_user(session, email)
-    if not db_user:
-        await crud.create_user(session, email)
-    await crud.add_user_to_group(session, group_id, email)
-    return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
+@app.get("/user-groups/{group_id}", response_class=HTMLResponse)
+async def user_group_detail(
+    request: Request, 
+    group_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """User group detail page."""
+    group = await crud.get_user_group(session, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Get users in the group
+    users = await crud.get_users_in_group(session, group_id)
+    
+    # Get associated URL groups
+    url_groups = []
+    if group.name != 'Internal User Group':
+        url_groups = await crud.get_url_groups_for_user_group(session, group_id)
+    
+    return templates.TemplateResponse("user_group_detail.html", {
+        "request": request, 
+        "group": group,
+        "users": users,
+        "url_groups": url_groups
+    })
 
-@app.post("/user-groups/{group_id}/remove-user")
-async def remove_user_from_group(request: Request, group_id: int, email: str = Form(...), session: AsyncSession = Depends(get_async_session)):
-    # First get the user by email
-    user = await crud.get_user(session, email)
-    if user:
-        await session.execute(delete(user_group_members).where(user_group_members.c.user_group_id == group_id, user_group_members.c.user_id == user.user_id))
-        await session.commit()
-    return RedirectResponse(url=f"/user-groups?selected={group_id}", status_code=status.HTTP_303_SEE_OTHER)
+@app.get("/user-groups/{group_id}/edit-form", response_class=HTMLResponse)
+async def user_groups_edit_form(
+    request: Request, 
+    group_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get the user group edit form."""
+    group = await crud.get_user_group(session, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    return templates.TemplateResponse("partials/user_groups_edit_form.html", {
+        "request": request, 
+        "group": group
+    })
+
+@app.put("/user-groups/{group_id}", response_class=HTMLResponse)
+async def update_user_group_ui(
+    request: Request, 
+    group_id: int,
+    name: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Update a user group via UI."""
+    try:
+        await crud.update_user_group(session, group_id, name=name)
+        
+        # Check if we're on the detail page by looking for a specific header
+        referer = request.headers.get("referer", "")
+        if f"/user-groups/{group_id}" in referer:
+            # We're on the detail page, return empty response
+            return HTMLResponse("")
+        else:
+            # We're on the list page, return the updated list
+            groups = await crud.get_all_user_groups(session)
+            
+            # Add user count to each group
+            for group in groups:
+                group.user_count = await crud.get_user_count_in_group(session, group.group_id)
+            
+            return templates.TemplateResponse("partials/user_groups_list.html", {
+                "request": request, 
+                "groups": groups
+            })
+    except ValueError as e:
+        # Return error message
+        return HTMLResponse(f"<div class='text-red-600 p-4'>{str(e)}</div>")
+
+@app.delete("/user-groups/{group_id}", response_class=HTMLResponse)
+async def delete_user_group_ui(
+    request: Request, 
+    group_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Delete a user group via UI."""
+    success = await crud.delete_user_group(session, group_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    groups = await crud.get_all_user_groups(session)
+    
+    # Add user count to each group
+    for group in groups:
+        group.user_count = await crud.get_user_count_in_group(session, group.group_id)
+    
+    return templates.TemplateResponse("partials/user_groups_list.html", {
+        "request": request, 
+        "groups": groups
+    })
+
+@app.get("/user-groups/{group_id}/add-user-form", response_class=HTMLResponse)
+async def user_groups_add_user_form(
+    request: Request, 
+    group_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get the add user form for a user group."""
+    group = await crud.get_user_group(session, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    return templates.TemplateResponse("partials/user_groups_add_user_form.html", {
+        "request": request, 
+        "group": group
+    })
+
+@app.post("/user-groups/{group_id}/add-user", response_class=HTMLResponse)
+async def add_user_to_group_ui(
+    request: Request, 
+    group_id: int, 
+    email: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Add a user to a group via UI."""
+    try:
+        # Validate input
+        if not email or not email.strip():
+            return HTMLResponse("<div class='text-red-600 p-4'>Error: Email cannot be empty</div>")
+        
+        email = email.strip()
+        
+        # Check if user already exists in this group
+        existing_user = await session.execute(
+            text("""
+                SELECT u.email FROM users u 
+                JOIN user_group_members ugm ON u.user_id = ugm.user_id 
+                WHERE ugm.user_group_id = :group_id AND u.email = :email
+            """),
+            {"group_id": group_id, "email": email}
+        )
+        
+        if existing_user.fetchone():
+            return HTMLResponse("<div class='text-red-600 p-4'>Error: User already exists in this group</div>")
+        
+        # Get the group to check if it exists
+        group = await crud.get_user_group(session, group_id)
+        if not group:
+            return HTMLResponse("<div class='text-red-600 p-4'>Error: User group not found</div>")
+        
+        # Ensure user exists or create
+        db_user = await crud.get_user(session, email)
+        if not db_user:
+            await crud.create_user(session, email)
+        await crud.add_user_to_group(session, group_id, email)
+        
+        # Return updated users list
+        users = await crud.get_users_in_group(session, group_id)
+        
+        return templates.TemplateResponse("partials/users_list.html", {
+            "request": request, 
+            "users": users,
+            "group": group
+        })
+    except ValueError as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: {str(e)}</div>")
+    except Exception as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: An unexpected error occurred while adding the user</div>")
+
+@app.delete("/user-groups/{group_id}/remove-user", response_class=HTMLResponse)
+async def remove_user_from_group_ui(
+    request: Request, 
+    group_id: int, 
+    email: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Remove a user from a group via UI."""
+    try:
+        # First get the user by email
+        user = await crud.get_user(session, email)
+        if user:
+            await session.execute(delete(user_group_members).where(user_group_members.c.user_group_id == group_id, user_group_members.c.user_id == user.user_id))
+            await session.commit()
+        
+        # Return updated users list
+        users = await crud.get_users_in_group(session, group_id)
+        group = await crud.get_user_group(session, group_id)
+        
+        return templates.TemplateResponse("partials/users_list.html", {
+            "request": request, 
+            "users": users,
+            "group": group
+        })
+    except Exception as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: An unexpected error occurred while removing the user</div>")
 
 @app.post("/user-groups/{group_id}/delete")
 async def delete_user_group(request: Request, group_id: int, session: AsyncSession = Depends(get_async_session)):
@@ -446,12 +610,9 @@ async def authorize_check(request: Request, email: str = Form(None), url_path: s
     if not email:
         email = request.query_params.get("email", "")
     
-    # Check if URL is a web asset file that should bypass authentication/authorization
-    from app.crud import is_web_asset, is_user_allowed
-    if is_web_asset(url_path):
-        allowed = True
-    else:
-        allowed = await is_user_allowed(session, email, url_path)
+    # Use the new full URL authorization function
+    from app.crud import is_user_allowed_full_url
+    allowed = await is_user_allowed_full_url(session, email, url_path)
     
     return templates.TemplateResponse("authorize.html", {"request": request, "allowed": allowed, "email": email, "url_path": url_path, "user": None})
 
@@ -567,6 +728,383 @@ def logout():
     response.delete_cookie(COOKIE_NAME)
     return response
 
+@app.get("/applications", response_class=HTMLResponse)
+async def applications(request: Request, session: AsyncSession = Depends(get_async_session)):
+    """Applications list page."""
+    applications = await crud.get_all_applications_with_url_groups_count(session)
+    return templates.TemplateResponse("applications.html", {
+        "request": request, 
+        "applications": applications
+    })
+
+@app.get("/applications/create-form", response_class=HTMLResponse)
+async def applications_create_form(request: Request):
+    """Get the application creation form."""
+    return templates.TemplateResponse("partials/applications_create_form.html", {"request": request})
+
+@app.post("/applications", response_class=HTMLResponse)
+async def create_application_ui(
+    request: Request, 
+    name: str = Form(...), 
+    host: str = Form(...), 
+    description: str = Form(None),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Create a new application via UI."""
+    try:
+        await crud.create_application(session, name=name, host=host, description=description)
+        applications = await crud.get_all_applications_with_url_groups_count(session)
+        return templates.TemplateResponse("partials/applications_list.html", {
+            "request": request, 
+            "applications": applications
+        })
+    except ValueError as e:
+        # Return error message
+        return HTMLResponse(f"<div class='text-red-600 p-4'>{str(e)}</div>")
+
+@app.get("/applications/{app_id}", response_class=HTMLResponse)
+async def application_detail(
+    request: Request, 
+    app_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Application detail page."""
+    app = await crud.get_application(session, app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Get URL groups with their URLs in a single query to avoid lazy loading
+    url_groups_result = await session.execute(
+        text("""
+            SELECT 
+                ug.group_id, 
+                ug.name, 
+                ug.app_id,
+                ug.created_at,
+                ug.protected,
+                u.path
+            FROM url_groups ug
+            LEFT JOIN urls u ON ug.group_id = u.url_group_id
+            WHERE ug.app_id = :app_id
+            ORDER BY ug.name, u.path
+        """),
+        {"app_id": app_id}
+    )
+    
+    # Group the results by URL group
+    url_groups_data = {}
+    for row in url_groups_result.fetchall():
+        group_id = row.group_id
+        if group_id not in url_groups_data:
+            url_groups_data[group_id] = {
+                "group_id": group_id,
+                "name": row.name,
+                "app_id": row.app_id,
+                "created_at": row.created_at,
+                "protected": row.protected,
+                "urls": []
+            }
+        if row.path:  # Only add if path is not None
+            url_groups_data[group_id]["urls"].append({"path": row.path})
+    
+    url_groups = list(url_groups_data.values())
+    
+    return templates.TemplateResponse("application_detail.html", {
+        "request": request, 
+        "app": app,
+        "url_groups": url_groups
+    })
+
+@app.get("/applications/{app_id}/edit-form", response_class=HTMLResponse)
+async def applications_edit_form(
+    request: Request, 
+    app_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get the application edit form."""
+    app = await crud.get_application(session, app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    return templates.TemplateResponse("partials/applications_edit_form.html", {
+        "request": request, 
+        "app": app
+    })
+
+@app.put("/applications/{app_id}", response_class=HTMLResponse)
+async def update_application_ui(
+    request: Request, 
+    app_id: int,
+    name: str = Form(...), 
+    host: str = Form(...), 
+    description: str = Form(None),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Update an application via UI."""
+    try:
+        await crud.update_application(session, app_id, name=name, host=host, description=description)
+        
+        # Check if we're on the detail page by looking for a specific header
+        referer = request.headers.get("referer", "")
+        if f"/applications/{app_id}" in referer:
+            # We're on the detail page, return empty response
+            return HTMLResponse("")
+        else:
+            # We're on the list page, return the updated list
+            applications = await crud.get_all_applications_with_url_groups_count(session)
+            return templates.TemplateResponse("partials/applications_list.html", {
+                "request": request, 
+                "applications": applications
+            })
+    except ValueError as e:
+        # Return error message
+        return HTMLResponse(f"<div class='text-red-600 p-4'>{str(e)}</div>")
+
+@app.delete("/applications/{app_id}", response_class=HTMLResponse)
+async def delete_application_ui(
+    request: Request, 
+    app_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Delete an application via UI."""
+    success = await crud.delete_application(session, app_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    applications = await crud.get_all_applications_with_url_groups_count(session)
+    return templates.TemplateResponse("partials/applications_list.html", {
+        "request": request, 
+        "applications": applications
+    })
+
+@app.get("/applications/{app_id}/url-groups/create-form", response_class=HTMLResponse)
+async def url_groups_create_form_app(
+    request: Request, 
+    app_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get the URL group creation form for an application."""
+    app = await crud.get_application(session, app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    return templates.TemplateResponse("partials/url_groups_create_form.html", {
+        "request": request, 
+        "app": app
+    })
+
+@app.post("/applications/{app_id}/url-groups", response_class=HTMLResponse)
+async def create_url_group_app(
+    request: Request, 
+    app_id: int,
+    name: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Create a new URL group for an application via UI."""
+    try:
+        await crud.create_url_group(session, name=name, app_id=app_id)
+        app = await crud.get_application(session, app_id)
+        
+        # Get URL groups with their URLs in a single query
+        url_groups_result = await session.execute(
+            text("""
+                SELECT 
+                    ug.group_id, 
+                    ug.name, 
+                    ug.app_id,
+                    ug.created_at,
+                    ug.protected,
+                    u.path
+                FROM url_groups ug
+                LEFT JOIN urls u ON ug.group_id = u.url_group_id
+                WHERE ug.app_id = :app_id
+                ORDER BY ug.name, u.path
+            """),
+            {"app_id": app_id}
+        )
+        
+        # Group the results by URL group
+        url_groups_data = {}
+        for row in url_groups_result.fetchall():
+            group_id = row.group_id
+            if group_id not in url_groups_data:
+                url_groups_data[group_id] = {
+                    "group_id": group_id,
+                    "name": row.name,
+                    "app_id": row.app_id,
+                    "created_at": row.created_at,
+                    "protected": row.protected,
+                    "urls": []
+                }
+            if row.path:  # Only add if path is not None
+                url_groups_data[group_id]["urls"].append({"path": row.path})
+        
+        url_groups = list(url_groups_data.values())
+        
+        return templates.TemplateResponse("partials/url_groups_list.html", {
+            "request": request, 
+            "url_groups": url_groups,
+            "app": app
+        })
+    except ValueError as e:
+        # Return error message
+        return HTMLResponse(f"<div class='text-red-600 p-4'>{str(e)}</div>")
+
+@app.get("/url-groups/{group_id}/add-url-form", response_class=HTMLResponse)
+async def url_groups_add_url_form(
+    request: Request, 
+    group_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get the add URL form for a URL group."""
+    group = await crud.get_url_group(session, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="URL group not found")
+    
+    return templates.TemplateResponse("partials/url_groups_add_url_form.html", {
+        "request": request, 
+        "group": group
+    })
+
+@app.post("/url-groups/{group_id}/add-url", response_class=HTMLResponse)
+async def add_url_to_group_ui(
+    request: Request, 
+    group_id: int, 
+    path: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Add a URL to a group via UI."""
+    try:
+        # Validate input
+        if not path or not path.strip():
+            return HTMLResponse("<div class='text-red-600 p-4'>Error: URL path cannot be empty</div>")
+        
+        path = path.strip()
+        
+        # Check if URL already exists in this group
+        existing_url = await session.execute(
+            text("SELECT path FROM urls WHERE url_group_id = :group_id AND path = :path"),
+            {"group_id": group_id, "path": path}
+        )
+        
+        if existing_url.fetchone():
+            return HTMLResponse("<div class='text-red-600 p-4'>Error: URL already exists in this group</div>")
+        
+        # Get the group to check if it exists and get app_id
+        group = await crud.get_url_group(session, group_id)
+        if not group:
+            return HTMLResponse("<div class='text-red-600 p-4'>Error: URL group not found</div>")
+        
+        # Ensure URL exists or create
+        db_url = await crud.get_url(session, path)
+        if not db_url:
+            await crud.create_url(session, path, group_id)
+        else:
+            await crud.add_url_to_group(session, group_id, path)
+        
+        # Return empty response for all contexts - let frontend handle page refresh
+        return HTMLResponse("")
+    except ValueError as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: {str(e)}</div>")
+    except Exception as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: An unexpected error occurred while adding the URL</div>")
+
+@app.delete("/url-groups/{group_id}/remove-url", response_class=HTMLResponse)
+async def remove_url_from_group_ui(
+    request: Request, 
+    group_id: int, 
+    path: str = Form(...), 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Remove a URL from a group via UI."""
+    try:
+        await session.execute(delete(Url).where(Url.url_group_id == group_id, Url.path == path))
+        await session.commit()
+        
+        # Return empty response for all contexts - let frontend handle page refresh
+        return HTMLResponse("")
+    except Exception as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: {str(e)}</div>")
+
+@app.delete("/url-groups/{group_id}", response_class=HTMLResponse)
+async def delete_url_group_ui(
+    request: Request, 
+    group_id: int, 
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Delete a URL group via UI."""
+    try:
+        # Get the group to find its application
+        group = await crud.get_url_group(session, group_id)
+        if not group:
+            raise HTTPException(status_code=404, detail="URL group not found")
+        
+        # Prevent deletion if protected
+        if getattr(group, 'protected', False):
+            return HTMLResponse("<div class='text-red-600 p-4'>Cannot delete protected URL group</div>")
+        
+        # Only allow deletion if there are no associations
+        assoc_count = (await session.execute(
+            text("SELECT COUNT(*) FROM user_group_url_group_associations WHERE url_group_id = :gid"), 
+            {"gid": group_id}
+        )).scalar()
+        
+        if assoc_count == 0:
+            await session.execute(delete(UrlGroup).where(UrlGroup.group_id == group_id))
+            await session.commit()
+            
+            if group.app_id:
+                # Return updated URL groups list for the application
+                app = await crud.get_application(session, group.app_id)
+                
+                # Get URL groups with their URLs in a single query
+                url_groups_result = await session.execute(
+                    text("""
+                        SELECT 
+                            ug.group_id, 
+                            ug.name, 
+                            ug.app_id,
+                            ug.created_at,
+                            ug.protected,
+                            u.path
+                        FROM url_groups ug
+                        LEFT JOIN urls u ON ug.group_id = u.url_group_id
+                        WHERE ug.app_id = :app_id
+                        ORDER BY ug.name, u.path
+                    """),
+                    {"app_id": group.app_id}
+                )
+                
+                # Group the results by URL group
+                url_groups_data = {}
+                for row in url_groups_result.fetchall():
+                    g_group_id = row.group_id
+                    if g_group_id not in url_groups_data:
+                        url_groups_data[g_group_id] = {
+                            "group_id": g_group_id,
+                            "name": row.name,
+                            "app_id": row.app_id,
+                            "created_at": row.created_at,
+                            "protected": row.protected,
+                            "urls": []
+                        }
+                    if row.path:  # Only add if path is not None
+                        url_groups_data[g_group_id]["urls"].append({"path": row.path})
+                
+                url_groups = list(url_groups_data.values())
+                
+                return templates.TemplateResponse("partials/url_groups_list.html", {
+                    "request": request, 
+                    "url_groups": url_groups,
+                    "app": app
+                })
+            else:
+                return HTMLResponse("<div class='text-green-600 p-4'>URL group deleted successfully</div>")
+        else:
+            return HTMLResponse("<div class='text-red-600 p-4'>Cannot delete URL group with existing associations</div>")
+    except Exception as e:
+        return HTMLResponse(f"<div class='text-red-600 p-4'>Error: {str(e)}</div>")
+
 # Routers for API endpoints will be included here (e.g., from app.api.endpoints import ...)
 # Example: app.include_router(user_group_router)
 app.include_router(auth_router)
@@ -574,3 +1112,4 @@ app.include_router(user_groups_router)
 app.include_router(url_groups_router)
 app.include_router(associations_router)
 app.include_router(authorize_router)
+app.include_router(applications_router)

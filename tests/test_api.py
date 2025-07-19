@@ -5,10 +5,11 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.main import app
 from app.db import Base, get_async_session
+from app import models  # Import models to ensure they are registered
 import asyncio
 
 # Use a separate in-memory SQLite DB for tests
-test_db_url = "sqlite+aiosqlite:///:memory:"
+test_db_url = "sqlite+aiosqlite:///api_test.db"
 engine_test = create_async_engine(test_db_url, echo=False, future=True)
 TestingSessionLocal = async_sessionmaker(engine_test, expire_on_commit=False)
 
@@ -150,7 +151,7 @@ async def test_authorize_allowed():
         resp4 = await ac.post(f"/api/url-groups/{url_group_id}/urls", json={"path": "/secret"})
         resp5 = await ac.post("/api/associations", json={"user_group_id": user_group_id, "url_group_id": url_group_id})
         # Should be allowed
-        resp6 = await ac.post("/api/authorize", json={"email": "authz@example.com", "url_path": "/secret"})
+        resp6 = await ac.get("/api/authorize?url=/secret", cookies={"x-auth-email": "authz@example.com"})
         assert resp6.status_code == 200
         assert resp6.json()["allowed"] is True
 
@@ -165,6 +166,6 @@ async def test_authorize_not_allowed():
         url_group_id = resp3.json()["group_id"]
         resp4 = await ac.post(f"/api/url-groups/{url_group_id}/urls", json={"path": "/forbidden"})
         # Should not be allowed (no association)
-        resp5 = await ac.post("/api/authorize", json={"email": "noauthz@example.com", "url_path": "/forbidden"})
-        assert resp5.status_code == 200
+        resp5 = await ac.get("/api/authorize?url=/forbidden", cookies={"x-auth-email": "noauthz@example.com"})
+        assert resp5.status_code == 403
         assert resp5.json()["allowed"] is False

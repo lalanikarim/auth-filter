@@ -1,7 +1,29 @@
-<form hx-post="/htmx/url-groups/create" hx-target="#url-groups-list" hx-swap="outerHTML" class="mb-4 flex gap-2 items-end">
-  <div>
-    <label for="name" class="block text-sm font-medium text-gray-700">Group Name</label>
-    <input type="text" name="name" id="name" required class="mt-1 px-2 py-1 border rounded w-48">
-  </div>
-  <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">Create</button>
+<form hx-post="/applications/{{ app.app_id }}/url-groups" hx-target="#url-groups-list" hx-swap="outerHTML" hx-on::after-request="if(event.detail.successful) closeModal()">
+    <div class="space-y-4">
+        <div>
+            <label for="name" class="block text-sm font-medium text-gray-700">URL Group Name</label>
+            <input 
+                type="text" 
+                name="name" 
+                id="name" 
+                required
+                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="Enter URL group name">
+            <p class="mt-1 text-sm text-gray-500">This group will be created for the application: {{ app.name }}</p>
+        </div>
+        
+        <div class="flex justify-end space-x-3 pt-4">
+            <button 
+                type="button" 
+                onclick="closeModal()"
+                class="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Cancel
+            </button>
+            <button 
+                type="submit"
+                class="bg-blue-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Create URL Group
+            </button>
+        </div>
+    </div>
 </form> 

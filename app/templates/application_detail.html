@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app.name }} - Application{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Application Header -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span class="text-blue-600 font-bold text-xl">{{ app.name[:2].upper() }}</span>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">{{ app.name }}</h1>
+                    <p class="text-lg text-gray-600">{{ app.host }}</p>
+                    {% if app.description %}
+                    <p class="text-gray-500 mt-1">{{ app.description }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="flex space-x-3">
+                <a 
+                    href="/applications" 
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    Back to Applications
+                </a>
+                <button 
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded"
+                    hx-get="/applications/{{ app.app_id }}/edit-form"
+                    hx-target="#modal-content"
+                    hx-trigger="click"
+                    onclick="openModal(); document.getElementById('modal-title').textContent='Edit Application';">
+                    Edit Application
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- URL Groups Section -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold text-gray-900">URL Groups</h2>
+                <button 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                    hx-get="/applications/{{ app.app_id }}/url-groups/create-form"
+                    hx-target="#modal-content"
+                    hx-trigger="click"
+                    onclick="openModal(); document.getElementById('modal-title').textContent='Create URL Group';">
+                    Create URL Group
+                </button>
+            </div>
+        </div>
+        
+        <div id="url-groups-list">
+            {% include "partials/url_groups_list.html" %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Forms -->
+<div id="modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="flex justify-between items-center p-6 border-b">
+                <h3 id="modal-title" class="text-lg font-semibold text-gray-900">Create URL Group</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="modal-content" class="p-6">
+                <!-- Form content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openModal() {
+    document.getElementById('modal').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+    document.getElementById('modal-content').innerHTML = '';
+}
+
+// Close modal when clicking outside
+document.getElementById('modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+</script>
+{% endblock %} 

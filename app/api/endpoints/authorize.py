@@ -14,28 +14,9 @@ async def authorize(
     session: AsyncSession = Depends(get_async_session),
     response: Response = None,
 ):
-    # Check if URL is a web asset file that should bypass authentication/authorization
-    if crud.is_web_asset(url):
-        response.status_code = 200
-        return schemas.AuthorizeResponse(allowed=True)
+    # Use the new full URL authorization function
+    allowed = await crud.is_user_allowed_full_url(session, x_auth_email, url)
     
-    # Check if URL is in the "Everyone" group (public access)
-    everyone_query = (
-        select(UrlGroup)
-        .join(Url, UrlGroup.group_id == Url.url_group_id)
-        .where(UrlGroup.name == "Everyone", Url.path == url)
-    )
-    result = await session.execute(everyone_query)
-    if result.scalar_one_or_none():
-        response.status_code = 200
-        return schemas.AuthorizeResponse(allowed=True)
-    
-    # For all other URLs, require authentication
-    if not x_auth_email:
-        response.status_code = 401
-        return schemas.AuthorizeResponse(allowed=False)
-    
-    allowed = await crud.is_user_allowed(session, x_auth_email, url)
     if allowed:
         response.status_code = 200
     else:

@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}User Groups{% endblock %}
+{% block title %}Applications{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-900">User Groups</h1>
+        <h1 class="text-3xl font-bold text-gray-900">Applications</h1>
         <button 
             class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            hx-get="/user-groups/create-form"
+            hx-get="/applications/create-form"
             hx-target="#modal-content"
             hx-trigger="click"
-            onclick="openModal(); document.getElementById('modal-title').textContent='Create User Group';">
-            Create User Group
+            onclick="openModal()">
+            Create Application
         </button>
     </div>
 
-    <!-- User Groups List -->
-    <div id="user-groups-list">
-        {% include "partials/user_groups_list.html" %}
+    <!-- Applications List -->
+    <div id="applications-list">
+        {% include "partials/applications_list.html" %}
     </div>
 </div>
 
@@ -27,7 +27,7 @@
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div class="flex justify-between items-center p-6 border-b">
-                <h3 id="modal-title" class="text-lg font-semibold text-gray-900">Create User Group</h3>
+                <h3 id="modal-title" class="text-lg font-semibold text-gray-900">Create Application</h3>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>

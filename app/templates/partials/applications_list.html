@@ -1,0 +1,81 @@
+<div class="bg-white shadow overflow-hidden sm:rounded-md">
+    {% if applications %}
+    <ul class="divide-y divide-gray-200">
+        {% for app in applications %}
+        <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                <span class="text-blue-600 font-semibold text-sm">{{ app.name[:2].upper() }}</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">
+                                {{ app.name }}
+                            </p>
+                            <p class="text-sm text-gray-500 truncate">
+                                {{ app.host }}
+                            </p>
+                            {% if app.description %}
+                            <p class="text-sm text-gray-400 truncate">
+                                {{ app.description }}
+                            </p>
+                            {% endif %}
+                            <p class="text-sm text-blue-600 mt-1">
+                                {{ app.url_groups_count or 0 }} URL Groups
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <a 
+                        href="/applications/{{ app.app_id }}"
+                        class="text-blue-600 hover:text-blue-900 text-sm font-medium">
+                        View
+                    </a>
+                    <button 
+                        class="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                        hx-get="/applications/{{ app.app_id }}/edit-form"
+                        hx-target="#modal-content"
+                        hx-trigger="click"
+                        onclick="openModal(); document.getElementById('modal-title').textContent='Edit Application';">
+                        Edit
+                    </button>
+                    <button 
+                        class="text-red-600 hover:text-red-900 text-sm font-medium"
+                        hx-delete="/applications/{{ app.app_id }}"
+                        hx-target="#applications-list"
+                        hx-confirm="Are you sure you want to delete this application? This will also delete all associated URL groups."
+                        hx-swap="outerHTML">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="px-6 py-12 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No applications</h3>
+        <p class="mt-1 text-sm text-gray-500">Get started by creating a new application.</p>
+        <div class="mt-6">
+            <button 
+                class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                hx-get="/applications/create-form"
+                hx-target="#modal-content"
+                hx-trigger="click"
+                onclick="openModal()">
+                <svg class="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                </svg>
+                Create Application
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div> 
